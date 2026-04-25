@@ -119,6 +119,25 @@ func TestParseReportArgsErrors(t *testing.T) {
 	}
 }
 
+func TestParseCompareArgs(t *testing.T) {
+	baseline, candidate, output, err := parseCompareArgs([]string{"baseline.json", "candidate.json", "--out=comparison.md"})
+	if err != nil {
+		t.Fatalf("parseCompareArgs() error = %v", err)
+	}
+	if baseline != "baseline.json" || candidate != "candidate.json" || output != "comparison.md" {
+		t.Fatalf("unexpected args: baseline=%q candidate=%q output=%q", baseline, candidate, output)
+	}
+}
+
+func TestParseCompareArgsErrors(t *testing.T) {
+	if _, _, _, err := parseCompareArgs([]string{"baseline.json"}); err == nil {
+		t.Fatalf("expected missing candidate error")
+	}
+	if _, _, _, err := parseCompareArgs([]string{"baseline.json", "candidate.json", "--out"}); err == nil {
+		t.Fatalf("expected missing output value error")
+	}
+}
+
 func TestParseDoctorArgs(t *testing.T) {
 	deep, image, err := parseDoctorArgs([]string{"--deep", "--image=custom:jmeter"})
 	if err != nil {
@@ -483,6 +502,77 @@ func TestRunReportFailsCIOnThresholds(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join("report-out", "summary.json")); err != nil {
 		t.Fatalf("expected report artifacts despite failed thresholds: %v", err)
+	}
+}
+
+func TestRunCompareWritesMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	baseline := `{
+  "total_samples": 2,
+  "successful": 2,
+  "failed": 0,
+  "error_rate": 0,
+  "average_ms": 100,
+  "p95_ms": 150,
+  "p99_ms": 180,
+  "endpoints": {
+    "GET /health": {"count": 2, "failed": 0, "average_ms": 100, "p95_ms": 150}
+  }
+}`
+	candidate := `{
+  "total_samples": 2,
+  "successful": 1,
+  "failed": 1,
+  "error_rate": 50,
+  "average_ms": 250,
+  "p95_ms": 400,
+  "p99_ms": 450,
+  "endpoints": {
+    "GET /health": {"count": 2, "failed": 1, "average_ms": 250, "p95_ms": 400}
+  }
+}`
+	if err := os.WriteFile("baseline.json", []byte(baseline), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("candidate.json", []byte(candidate), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"compare", "baseline.json", "candidate.json", "--out", "comparison.md"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(compare) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile("comparison.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "# Loadwright Comparison") ||
+		!strings.Contains(string(data), "| Failed samples | 0 | 1 | +1 |") ||
+		!strings.Contains(string(data), "| GET /health | changed | 0 | 1 | +50.00% | +150.00 ms | +250.00 ms |") {
+		t.Fatalf("unexpected comparison:\n%s", data)
+	}
+	if !strings.Contains(stdout.String(), "wrote comparison.md") {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestRunComparePrintsMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	if err := os.WriteFile("baseline.json", []byte(`{"total_samples":1,"endpoints":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("candidate.json", []byte(`{"total_samples":2,"endpoints":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"compare", "baseline.json", "candidate.json"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(compare) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "| Total samples | 1 | 2 | +1 |") {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
 }
 

@@ -44,6 +44,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return run(args[1:], stdout, stderr)
 	case "report":
 		return reportCommand(args[1:], stdout, stderr)
+	case "compare":
+		return compareCommand(args[1:], stdout, stderr)
 	case "import":
 		return importCommand(args[1:], stdout, stderr)
 	default:
@@ -67,6 +69,7 @@ Usage:
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
   loadwright report <results.jtl> [--out-dir results/report] [--error-rate-lt 1] [--p95-ms-lt 3000] [--avg-ms-lt 1000] [--ci]
+  loadwright compare <baseline-summary.json> <candidate-summary.json> [-o comparison.md]
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
@@ -76,7 +79,8 @@ Commands:
   validate  Validate a YAML spec without compiling or running JMeter
   compile   Compile a YAML spec to JMeter JMX
   run       Run a YAML spec or existing JMX through Dockerized JMeter
-  report    Generate reports from an existing JMeter JTL file`)
+  report    Generate reports from an existing JMeter JTL file
+  compare   Compare two Loadwright summary.json files`)
 }
 
 func doctor(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -329,6 +333,39 @@ func reportCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "thresholds failed")
 		return 1
 	}
+	return 0
+}
+
+func compareCommand(args []string, stdout io.Writer, stderr io.Writer) int {
+	baselinePath, candidatePath, output, err := parseCompareArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	baseline, err := report.LoadSummaryFile(baselinePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load baseline summary failed: %v\n", err)
+		return 1
+	}
+	candidate, err := report.LoadSummaryFile(candidatePath)
+	if err != nil {
+		fmt.Fprintf(stderr, "load candidate summary failed: %v\n", err)
+		return 1
+	}
+	markdown := report.RenderComparisonMarkdown(report.CompareSummaries(baseline, candidate))
+	if output == "" {
+		fmt.Fprint(stdout, markdown)
+		return 0
+	}
+	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
+		fmt.Fprintf(stderr, "create comparison output dir: %v\n", err)
+		return 1
+	}
+	if err := os.WriteFile(output, []byte(markdown), 0o644); err != nil {
+		fmt.Fprintf(stderr, "write comparison failed: %v\n", err)
+		return 1
+	}
+	fmt.Fprintf(stdout, "wrote %s\n", output)
 	return 0
 }
 
@@ -632,6 +669,31 @@ func parseReportArgs(args []string) (jtlPath string, outputDir string, threshold
 		return "", "", thresholds, false, fmt.Errorf("report requires exactly one JTL path")
 	}
 	return positional[0], outputDir, thresholds, ci, nil
+}
+
+func parseCompareArgs(args []string) (baselinePath string, candidatePath string, output string, err error) {
+	var positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-o" || arg == "--out":
+			i++
+			if i >= len(args) {
+				return "", "", "", fmt.Errorf("%s requires a value", arg)
+			}
+			output = args[i]
+		case strings.HasPrefix(arg, "-o="):
+			output = strings.TrimPrefix(arg, "-o=")
+		case strings.HasPrefix(arg, "--out="):
+			output = strings.TrimPrefix(arg, "--out=")
+		default:
+			positional = append(positional, arg)
+		}
+	}
+	if len(positional) != 2 {
+		return "", "", "", fmt.Errorf("compare requires exactly two summary paths")
+	}
+	return positional[0], positional[1], output, nil
 }
 
 func parseThresholdValue(flag string, raw string) (float64, error) {

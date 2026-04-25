@@ -1,6 +1,7 @@
 package report
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -198,6 +199,68 @@ func TestWriteAllCreatesArtifacts(t *testing.T) {
 	}
 }
 
+func TestLoadSummaryFileAndRenderComparison(t *testing.T) {
+	dir := t.TempDir()
+	baselinePath := filepath.Join(dir, "baseline.json")
+	candidatePath := filepath.Join(dir, "candidate.json")
+	writeSummaryJSON(t, baselinePath, Summary{
+		TotalSamples: 10,
+		Successful:   9,
+		Failed:       1,
+		ErrorRate:    10,
+		AverageMS:    100,
+		P95MS:        200,
+		P99MS:        250,
+		Endpoints: map[string]Endpoint{
+			"GET /stable":  {Count: 5, Failed: 0, AverageMS: 80, P95MS: 100},
+			"GET /removed": {Count: 5, Failed: 1, AverageMS: 120, P95MS: 200},
+		},
+	})
+	writeSummaryJSON(t, candidatePath, Summary{
+		TotalSamples: 12,
+		Successful:   10,
+		Failed:       2,
+		ErrorRate:    16.67,
+		AverageMS:    150,
+		P95MS:        260,
+		P99MS:        300,
+		Endpoints: map[string]Endpoint{
+			"GET /stable":           {Count: 6, Failed: 1, AverageMS: 130, P95MS: 240},
+			"POST /added|expensive": {Count: 6, Failed: 1, AverageMS: 170, P95MS: 280},
+		},
+	})
+	baseline, err := LoadSummaryFile(baselinePath)
+	if err != nil {
+		t.Fatalf("LoadSummaryFile(baseline) error = %v", err)
+	}
+	candidate, err := LoadSummaryFile(candidatePath)
+	if err != nil {
+		t.Fatalf("LoadSummaryFile(candidate) error = %v", err)
+	}
+	markdown := RenderComparisonMarkdown(CompareSummaries(baseline, candidate))
+	for _, want := range []string{
+		"| Total samples | 10 | 12 | +2 |",
+		"| Error rate | 10.00% | 16.67% | +6.67% |",
+		"| GET /stable | changed | 0 | 1 | +16.67% | +50.00 ms | +140.00 ms |",
+		"POST /added\\|expensive",
+		"| GET /removed | removed | 1 | 0 | -20.00% | -120.00 ms | -200.00 ms |",
+	} {
+		if !strings.Contains(markdown, want) {
+			t.Fatalf("comparison missing %q:\n%s", want, markdown)
+		}
+	}
+	if strings.Index(markdown, "GET /stable") > strings.Index(markdown, "POST /added\\|expensive") {
+		t.Fatalf("changed endpoints should sort before added endpoints:\n%s", markdown)
+	}
+}
+
+func TestRenderComparisonWithoutEndpoints(t *testing.T) {
+	markdown := RenderComparisonMarkdown(CompareSummaries(&Summary{}, &Summary{}))
+	if !strings.Contains(markdown, "No endpoint data found.") {
+		t.Fatalf("comparison missing empty endpoint message:\n%s", markdown)
+	}
+}
+
 func writeJTL(t *testing.T, contents string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -206,4 +269,15 @@ func writeJTL(t *testing.T, contents string) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+func writeSummaryJSON(t *testing.T, path string, summary Summary) {
+	t.Helper()
+	data, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

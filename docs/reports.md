@@ -69,6 +69,25 @@ bin/loadwright report results.jtl \
 
 The report command writes artifacts before checking the `--ci` exit status, so failed threshold runs still leave inspectable summaries behind.
 
+## Compare Runs
+
+Compare two Loadwright `summary.json` files:
+
+```bash
+bin/loadwright compare results/baseline/summary.json results/candidate/summary.json
+```
+
+Write the comparison to a Markdown file:
+
+```bash
+bin/loadwright compare \
+  results/baseline/summary.json \
+  results/candidate/summary.json \
+  -o results/comparison.md
+```
+
+The comparison includes top-level metric deltas plus per-endpoint deltas for failure count, error rate, average latency, and p95 latency. Added and removed endpoints are called out in the endpoint table.
+
 ## JUnit
 
 `junit.xml` contains one testcase for sample failures and one testcase per threshold. This makes Loadwright reports consumable by CI systems that understand JUnit test reports.
