@@ -16,6 +16,19 @@ bin/loadwright report results/manual-smoke/results.jtl --out-dir results/manual-
 - `index.html`: standalone human-readable report
 - `junit.xml`: CI-friendly JUnit report for sample and threshold failures
 
+When `loadwright run` uses the default output directory, Loadwright also writes `results/latest.json`:
+
+```json
+{
+  "run_id": "20260425-120000",
+  "run_dir": "results/20260425-120000",
+  "report": "results/20260425-120000/index.html",
+  "updated_at": "2026-04-25T12:00:00Z"
+}
+```
+
+On platforms that support symlinks, `results/latest` points at the newest default run directory. Explicit `--out-dir` runs do not update `results/latest.json`.
+
 ## Metrics
 
 Loadwright currently reports:

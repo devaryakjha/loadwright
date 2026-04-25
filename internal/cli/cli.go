@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -186,6 +187,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	updateLatest := outputDir == ""
 	runID := time.Now().UTC().Format("20060102-150405")
 	if outputDir == "" {
 		outputDir = filepath.Join("results", runID)
@@ -236,12 +238,69 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "write report failed: %v\n", err)
 		return 1
 	}
+	if updateLatest {
+		if err := writeLatestRun("results", outputDir, time.Now().UTC()); err != nil {
+			fmt.Fprintf(stderr, "warning: update latest run pointer: %v\n", err)
+		}
+	}
 	fmt.Fprintf(stdout, "report %s\n", filepath.Join(outputDir, "index.html"))
 	if ci && !summary.Passed() {
 		fmt.Fprintln(stderr, "thresholds failed")
 		return 1
 	}
 	return 0
+}
+
+type latestRun struct {
+	RunID     string `json:"run_id"`
+	RunDir    string `json:"run_dir"`
+	Report    string `json:"report"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+func writeLatestRun(resultsRoot string, outputDir string, updatedAt time.Time) error {
+	if err := os.MkdirAll(resultsRoot, 0o755); err != nil {
+		return err
+	}
+	runDir := filepath.Clean(outputDir)
+	relativeRunDir, err := filepath.Rel(resultsRoot, runDir)
+	if err == nil && !strings.HasPrefix(relativeRunDir, "..") && relativeRunDir != "." {
+		runDir = filepath.ToSlash(filepath.Join(resultsRoot, relativeRunDir))
+	}
+	metadata := latestRun{
+		RunID:     filepath.Base(outputDir),
+		RunDir:    filepath.ToSlash(runDir),
+		Report:    filepath.ToSlash(filepath.Join(runDir, "index.html")),
+		UpdatedAt: updatedAt.Format(time.RFC3339),
+	}
+	data, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	latestPath := filepath.Join(resultsRoot, "latest.json")
+	if err := os.WriteFile(latestPath, data, 0o644); err != nil {
+		return err
+	}
+	writeLatestSymlink(resultsRoot, outputDir)
+	return nil
+}
+
+func writeLatestSymlink(resultsRoot string, outputDir string) {
+	latestPath := filepath.Join(resultsRoot, "latest")
+	if info, err := os.Lstat(latestPath); err == nil {
+		if info.Mode()&os.ModeSymlink == 0 {
+			return
+		}
+		if err := os.Remove(latestPath); err != nil {
+			return
+		}
+	}
+	target, err := filepath.Rel(resultsRoot, outputDir)
+	if err != nil || strings.HasPrefix(target, "..") || target == "." {
+		return
+	}
+	_ = os.Symlink(target, latestPath)
 }
 
 func reportCommand(args []string, stdout io.Writer, stderr io.Writer) int {

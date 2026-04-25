@@ -9,6 +9,7 @@
 - Add initial HAR 1.2 import support.
 - Improve Markdown and HTML reports with endpoint triage tables.
 - Add a copy-paste GitHub Actions workflow example for downstream CI adoption.
+- Add latest-run metadata for default `loadwright run` result directories.
 
 ## 0.1.0 - 2026-04-25
 

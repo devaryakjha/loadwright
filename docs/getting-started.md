@@ -34,6 +34,8 @@ The run writes artifacts to `results/<run-id>/`:
 - `index.html`
 - `junit.xml`
 
+Default runs also update `results/latest.json`, and create a best-effort `results/latest` symlink on platforms that support it.
+
 ## Compile Without Running
 
 ```bash

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -547,6 +548,99 @@ thresholds:
 	}
 }
 
+func TestRunSpecDefaultOutputCreatesLatestPointer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: latest-run
+target: https://example.com
+requests:
+  - name: health
+    path: /health
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	metadata := readLatestRun(t, filepath.Join("results", "latest.json"))
+	if metadata.RunID == "" {
+		t.Fatalf("expected run_id in latest metadata: %+v", metadata)
+	}
+	if metadata.RunDir != filepath.ToSlash(filepath.Join("results", metadata.RunID)) {
+		t.Fatalf("unexpected run_dir: %+v", metadata)
+	}
+	if metadata.Report != filepath.ToSlash(filepath.Join("results", metadata.RunID, "index.html")) {
+		t.Fatalf("unexpected report path: %+v", metadata)
+	}
+	if _, err := os.Stat(filepath.FromSlash(metadata.Report)); err != nil {
+		t.Fatalf("expected latest report path to exist: %v", err)
+	}
+}
+
+func TestRunSpecExplicitOutputDoesNotCreateLatestPointer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: explicit-run
+target: https://example.com
+requests:
+  - path: /health
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml", "--out-dir", "results/manual"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join("results", "latest.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected no latest pointer for explicit out-dir, err=%v", err)
+	}
+}
+
+func TestRunSpecThresholdFailureStillCreatesLatestPointer(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: failing-latest-run
+target: https://example.com
+requests:
+  - name: health
+    path: /health
+thresholds:
+  p95_ms_lt: 1
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml", "--ci"}, &stdout, &stderr)
+	if code != 1 || !strings.Contains(stderr.String(), "thresholds failed") {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	metadata := readLatestRun(t, filepath.Join("results", "latest.json"))
+	if metadata.Report == "" {
+		t.Fatalf("expected latest metadata despite threshold failure: %+v", metadata)
+	}
+	if _, err := os.Stat(filepath.FromSlash(metadata.Report)); err != nil {
+		t.Fatalf("expected latest report path to exist: %v", err)
+	}
+}
+
 func chdir(t *testing.T, dir string) {
 	t.Helper()
 	previous, err := os.Getwd()
@@ -561,6 +655,19 @@ func chdir(t *testing.T, dir string) {
 			t.Fatalf("restore working directory: %v", err)
 		}
 	})
+}
+
+func readLatestRun(t *testing.T, path string) latestRun {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata latestRun
+	if err := json.Unmarshal(data, &metadata); err != nil {
+		t.Fatal(err)
+	}
+	return metadata
 }
 
 func installDockerShim(t *testing.T, dir string) {
