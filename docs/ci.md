@@ -58,3 +58,40 @@ find examples -name '*.yaml' -not -path 'examples/openapi/*' -print | sort | whi
   fi
 done
 ```
+
+## Copy-Paste GitHub Actions Workflow
+
+See [examples/github-actions/loadwright-pr.yml](../examples/github-actions/loadwright-pr.yml) for a complete workflow users can copy into their own repository.
+
+The workflow has two jobs:
+
+- `validate`: runs on pull requests and pushes. It validates YAML specs and compiles them to JMX without starting JMeter.
+- `smoke`: runs only on pushes to `main`. It runs one threshold-gated smoke test and uploads the generated report artifacts.
+
+This split keeps pull request checks fast while still giving the default branch a real performance gate.
+
+Expected repository layout for the example:
+
+```text
+load-tests/
+  smoke.yaml
+.env.ci
+```
+
+If your specs do not need environment values, remove `--env-file .env.ci` from the workflow.
+
+For private APIs, keep secrets in GitHub Actions secrets and write `.env.ci` during the workflow:
+
+```yaml
+- name: Write Loadwright env
+  run: |
+    {
+      echo "API_BASE_URL=${API_BASE_URL}"
+      echo "API_TOKEN=${API_TOKEN}"
+    } > .env.ci
+  env:
+    API_BASE_URL: ${{ secrets.API_BASE_URL }}
+    API_TOKEN: ${{ secrets.API_TOKEN }}
+```
+
+Keep pull request runs small. Large load tests should run on `push`, `schedule`, or manual `workflow_dispatch` triggers where they will not slow every review cycle.

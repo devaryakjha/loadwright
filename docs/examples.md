@@ -109,6 +109,14 @@ bin/loadwright compile /tmp/checkout-har-loadwright.yaml -o /tmp/checkout-har.jm
 
 Demonstrates generating a starter Loadwright spec from a HAR 1.2 traffic capture.
 
+## GitHub Actions
+
+```bash
+cp examples/github-actions/loadwright-pr.yml .github/workflows/loadwright.yml
+```
+
+Demonstrates a downstream CI workflow with fast pull request validation and a threshold-gated smoke run on `main`.
+
 ## CSV Users
 
 ```bash

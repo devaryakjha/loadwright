@@ -41,3 +41,19 @@ jobs:
             bin/loadwright import openapi "$spec" -o "/tmp/loadwright-openapi/$name.loadwright.yaml"
             bin/loadwright compile "/tmp/loadwright-openapi/$name.loadwright.yaml" -o "/tmp/loadwright-openapi/$name.jmx"
           done
+      - name: Import Postman examples
+        run: |
+          mkdir -p /tmp/loadwright-postman
+          find examples/postman -name '*.json' -print | sort | while read -r collection; do
+            name="$(basename "$collection" .postman_collection.json)"
+            bin/loadwright import postman "$collection" -o "/tmp/loadwright-postman/$name.loadwright.yaml"
+            bin/loadwright compile "/tmp/loadwright-postman/$name.loadwright.yaml" -o "/tmp/loadwright-postman/$name.jmx"
+          done
+      - name: Import HAR examples
+        run: |
+          mkdir -p /tmp/loadwright-har
+          find examples/har -name '*.har' -print | sort | while read -r capture; do
+            name="$(basename "$capture" .har)"
+            bin/loadwright import har "$capture" -o "/tmp/loadwright-har/$name.loadwright.yaml"
+            bin/loadwright compile "/tmp/loadwright-har/$name.loadwright.yaml" -o "/tmp/loadwright-har/$name.jmx"
+          done
