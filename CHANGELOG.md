@@ -7,6 +7,7 @@
 - Add mailmap attribution for Jaykumar Gori's earlier commit identities.
 - Add initial Postman Collection v2.1 import support.
 - Add initial HAR 1.2 import support.
+- Improve Markdown and HTML reports with endpoint triage tables.
 
 ## 0.1.0 - 2026-04-25
 

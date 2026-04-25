@@ -28,6 +28,8 @@ Loadwright currently reports:
 - per-endpoint count, failures, average, and p95
 - threshold pass/fail results
 
+The HTML and Markdown reports include endpoint tables sorted for triage: failing endpoints first, then highest p95 latency, then highest average latency.
+
 ## Thresholds
 
 Thresholds live in the YAML spec:
