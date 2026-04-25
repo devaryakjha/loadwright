@@ -76,7 +76,7 @@ Goal: let teams reuse assets they already have.
 
 - Import OpenAPI/Swagger specs into Loadwright YAML.
 - Expand Postman collection import beyond the initial HTTP starter-spec support.
-- Import browser HAR files.
+- Expand browser HAR import beyond the initial HTTP starter-spec support.
 - Run and report on existing `.jmx` files without conversion.
 - Add request variables, CSV data sources, auth helpers, and environment files.
 

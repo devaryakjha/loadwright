@@ -14,13 +14,13 @@ Loadwright `v0.1.0` is intentionally focused on HTTP API load-test workflows.
 - Reports from Loadwright runs or existing JMeter JTL files.
 - Initial OpenAPI 3.x import for simple HTTP APIs.
 - Initial Postman Collection v2.1 import for common HTTP API collections.
+- Initial HAR 1.2 import for common HTTP API traffic captures.
 
 ## Not Yet In Scope
 
 - Full JMeter GUI feature parity.
 - WebSocket testing.
 - JMeter plugin management.
-- HAR import.
 - Distributed load generation across multiple workers.
 - Historical trend storage.
 - Browser-level performance testing.

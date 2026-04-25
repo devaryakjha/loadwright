@@ -154,6 +154,16 @@ func TestParseImportPostmanArgs(t *testing.T) {
 	}
 }
 
+func TestParseImportHARArgs(t *testing.T) {
+	input, output, baseURL, err := parseImportHARArgs([]string{"capture.har", "-o", "loadwright.yaml", "--base-url=https://staging.example.com"})
+	if err != nil {
+		t.Fatalf("parseImportHARArgs() error = %v", err)
+	}
+	if input != "capture.har" || output != "loadwright.yaml" || baseURL != "https://staging.example.com" {
+		t.Fatalf("unexpected args: input=%q output=%q baseURL=%q", input, output, baseURL)
+	}
+}
+
 func TestParseImportOpenAPIArgsErrors(t *testing.T) {
 	if _, _, _, err := parseImportOpenAPIArgs([]string{"openapi.yaml", "--base-url"}); err == nil {
 		t.Fatalf("expected missing base-url value error")
@@ -365,9 +375,66 @@ func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
 	}
 }
 
+func TestRunImportHARCreatesSpecAndWarnings(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	capture := `{
+  "log": {
+    "version": "1.2",
+    "entries": [
+      {
+        "request": {
+          "method": "GET",
+          "url": "https://api.example.com/users?limit=10",
+          "headers": [{"name": "Accept", "value": "application/json"}],
+          "queryString": [{"name": "active", "value": true}]
+        }
+      },
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://api.example.com/users",
+          "headers": [{"name": "Content-Type", "value": "application/json"}],
+          "postData": {
+            "mimeType": "application/json",
+            "text": "{\"name\":\"Ada\"}"
+          }
+        }
+      },
+      {
+        "request": {
+          "method": "GET",
+          "url": "https://other.example.com/health"
+        }
+      }
+    ]
+  }
+}`
+	if err := os.WriteFile("capture.har", []byte(capture), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"import", "har", "capture.har", "-o", "loadwright.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(import har) code=%d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile("loadwright.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "target: https://api.example.com") ||
+		!strings.Contains(string(data), "name: GET /users") ||
+		!strings.Contains(string(data), "name: Ada") {
+		t.Fatalf("unexpected imported spec: %s", data)
+	}
+	if !strings.Contains(stderr.String(), "warning: GET /health uses target https://other.example.com; imported path will run against https://api.example.com") {
+		t.Fatalf("expected warning, got stderr=%s", stderr.String())
+	}
+}
+
 func TestRunImportRejectsUnsupportedSource(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"import", "har", "capture.har"}, &stdout, &stderr)
+	code := Run([]string{"import", "insomnia", "export.json"}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "unsupported import source") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}

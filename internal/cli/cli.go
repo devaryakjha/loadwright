@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/devaryakjha/loadwright/internal/har"
 	"github.com/devaryakjha/loadwright/internal/jmx"
 	"github.com/devaryakjha/loadwright/internal/openapi"
 	"github.com/devaryakjha/loadwright/internal/postman"
@@ -60,6 +61,7 @@ Usage:
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
   loadwright import postman <collection.json> [-o loadwright.yaml] [--base-url https://api.example.com]
+  loadwright import har <capture.har> [-o loadwright.yaml] [--base-url https://api.example.com]
   loadwright validate <spec.yaml> [--env-file .env.test]
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
@@ -281,6 +283,8 @@ func importCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 		return importOpenAPI(args[1:], stdout, stderr)
 	case "postman":
 		return importPostman(args[1:], stdout, stderr)
+	case "har":
+		return importHAR(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unsupported import source: %s\n", args[0])
 		return 2
@@ -316,6 +320,31 @@ func importPostman(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 2
 	}
 	result, err := postman.ImportFile(input, postman.Options{BaseURL: baseURL})
+	if err != nil {
+		fmt.Fprintf(stderr, "import failed: %v\n", err)
+		return 1
+	}
+	if output == "" {
+		output = "loadwright.yaml"
+	}
+	if err := spec.WriteFile(result.Spec, output); err != nil {
+		fmt.Fprintf(stderr, "write spec failed: %v\n", err)
+		return 1
+	}
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", warning)
+	}
+	fmt.Fprintf(stdout, "wrote %s\n", output)
+	return 0
+}
+
+func importHAR(args []string, stdout io.Writer, stderr io.Writer) int {
+	input, output, baseURL, err := parseImportHARArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	result, err := har.ImportFile(input, har.Options{BaseURL: baseURL})
 	if err != nil {
 		fmt.Fprintf(stderr, "import failed: %v\n", err)
 		return 1
@@ -560,6 +589,10 @@ func parseImportOpenAPIArgs(args []string) (input string, output string, baseURL
 
 func parseImportPostmanArgs(args []string) (input string, output string, baseURL string, err error) {
 	return parseImportArgs("postman", args)
+}
+
+func parseImportHARArgs(args []string) (input string, output string, baseURL string, err error) {
+	return parseImportArgs("har", args)
 }
 
 func parseImportArgs(source string, args []string) (input string, output string, baseURL string, err error) {

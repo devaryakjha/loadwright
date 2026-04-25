@@ -100,6 +100,15 @@ bin/loadwright compile /tmp/checkout-loadwright.yaml -o /tmp/checkout.jmx
 
 Demonstrates generating a starter Loadwright spec from a Postman Collection v2.1 file.
 
+## HAR Import
+
+```bash
+bin/loadwright import har examples/har/checkout.har -o /tmp/checkout-har-loadwright.yaml
+bin/loadwright compile /tmp/checkout-har-loadwright.yaml -o /tmp/checkout-har.jmx
+```
+
+Demonstrates generating a starter Loadwright spec from a HAR 1.2 traffic capture.
+
 ## CSV Users
 
 ```bash
