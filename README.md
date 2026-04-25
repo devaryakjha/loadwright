@@ -28,6 +28,7 @@ Use Loadwright when you want:
 - JSON, Markdown, HTML, and JUnit summaries
 - CI pass/fail thresholds
 - OpenAPI-to-spec bootstrapping for simple API tests
+- Postman-collection-to-spec bootstrapping for common API workflows
 - future optional AI assistance without depending on AI for normal runs
 
 Current `v0.1.0` scope: HTTP API load tests. See [docs/limitations.md](docs/limitations.md) for known limits.
@@ -100,6 +101,7 @@ More docs:
 - [Install](docs/install.md)
 - [Examples](docs/examples.md)
 - [OpenAPI import](docs/openapi-import.md)
+- [Postman import](docs/postman-import.md)
 - [Data sources](docs/data-sources.md)
 - [CI](docs/ci.md)
 - [Reports](docs/reports.md)
@@ -115,6 +117,7 @@ loadwright doctor [--deep] [--image justb4/jmeter:latest]
 loadwright version
 loadwright init [path]
 loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
+loadwright import postman <collection.json> [-o loadwright.yaml] [--base-url https://api.example.com]
 loadwright validate <spec.yaml> [--env-file .env.test]
 loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
 loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
@@ -128,7 +131,7 @@ loadwright report <results.jtl> [--out-dir results/report] [--error-rate-lt 1] [
 See [ROADMAP.md](ROADMAP.md). The short version:
 
 - make the deterministic Go CLI excellent first
-- add OpenAPI/Postman/HAR import next
+- add broader import support next
 - add WebSocket/plugin automation
 - add optional AI later for generating, explaining, and improving specs
 

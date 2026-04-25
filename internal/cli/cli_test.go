@@ -144,6 +144,16 @@ func TestParseImportOpenAPIArgs(t *testing.T) {
 	}
 }
 
+func TestParseImportPostmanArgs(t *testing.T) {
+	input, output, baseURL, err := parseImportPostmanArgs([]string{"collection.json", "--out=loadwright.yaml", "--base-url", "https://staging.example.com"})
+	if err != nil {
+		t.Fatalf("parseImportPostmanArgs() error = %v", err)
+	}
+	if input != "collection.json" || output != "loadwright.yaml" || baseURL != "https://staging.example.com" {
+		t.Fatalf("unexpected args: input=%q output=%q baseURL=%q", input, output, baseURL)
+	}
+}
+
 func TestParseImportOpenAPIArgsErrors(t *testing.T) {
 	if _, _, _, err := parseImportOpenAPIArgs([]string{"openapi.yaml", "--base-url"}); err == nil {
 		t.Fatalf("expected missing base-url value error")
@@ -307,9 +317,57 @@ paths:
 	}
 }
 
+func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	collection := `{
+  "info": {"name": "CLI Import"},
+  "variable": [{"key": "base_url", "value": "https://api.example.com"}],
+  "item": [
+    {
+      "name": "Create user",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {"mode": "raw", "raw": "{\"name\":\"Ada\"}", "options": {"raw": {"language": "json"}}},
+        "url": "{{base_url}}/users"
+      }
+    },
+    {
+      "name": "Upload",
+      "request": {
+        "method": "POST",
+        "body": {"mode": "formdata"},
+        "url": "{{base_url}}/upload"
+      }
+    }
+  ]
+}`
+	if err := os.WriteFile("collection.json", []byte(collection), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"import", "postman", "collection.json", "-o", "loadwright.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(import postman) code=%d stderr=%s", code, stderr.String())
+	}
+	data, err := os.ReadFile("loadwright.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "target: '{{base_url}}'") ||
+		!strings.Contains(string(data), "name: Create user") ||
+		!strings.Contains(string(data), "name: Ada") {
+		t.Fatalf("unexpected imported spec: %s", data)
+	}
+	if !strings.Contains(stderr.String(), `warning: Upload: request body mode "formdata" is not imported yet`) {
+		t.Fatalf("expected warning, got stderr=%s", stderr.String())
+	}
+}
+
 func TestRunImportRejectsUnsupportedSource(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"import", "postman", "collection.json"}, &stdout, &stderr)
+	code := Run([]string{"import", "har", "capture.har"}, &stdout, &stderr)
 	if code != 2 || !strings.Contains(stderr.String(), "unsupported import source") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}

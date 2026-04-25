@@ -1,0 +1,36 @@
+{
+  "info": {
+    "name": "Checkout API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "base_url", "value": "https://httpbin.org"},
+    {"key": "token", "value": "demo-token"}
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{"key": "token", "value": "{{token}}"}]
+  },
+  "item": [
+    {
+      "name": "Status",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/status/200"
+      }
+    },
+    {
+      "name": "Create payload",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"hello\":\"world\"}",
+          "options": {"raw": {"language": "json"}}
+        },
+        "url": "{{base_url}}/post"
+      }
+    }
+  ]
+}

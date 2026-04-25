@@ -91,6 +91,15 @@ bin/loadwright compile /tmp/petstore-loadwright.yaml -o /tmp/petstore.jmx
 
 Demonstrates generating a starter Loadwright spec from OpenAPI 3.x.
 
+## Postman Import
+
+```bash
+bin/loadwright import postman examples/postman/checkout-api.postman_collection.json -o /tmp/checkout-loadwright.yaml
+bin/loadwright compile /tmp/checkout-loadwright.yaml -o /tmp/checkout.jmx
+```
+
+Demonstrates generating a starter Loadwright spec from a Postman Collection v2.1 file.
+
 ## CSV Users
 
 ```bash

@@ -5,6 +5,7 @@
 - Remove the legacy Python prototype from the public repository.
 - Add public project-status badges and initial prototype attribution.
 - Add mailmap attribution for Jaykumar Gori's earlier commit identities.
+- Add initial Postman Collection v2.1 import support.
 
 ## 0.1.0 - 2026-04-25
 

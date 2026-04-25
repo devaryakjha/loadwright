@@ -11,6 +11,7 @@ import (
 
 	"github.com/devaryakjha/loadwright/internal/jmx"
 	"github.com/devaryakjha/loadwright/internal/openapi"
+	"github.com/devaryakjha/loadwright/internal/postman"
 	"github.com/devaryakjha/loadwright/internal/report"
 	"github.com/devaryakjha/loadwright/internal/runtime"
 	"github.com/devaryakjha/loadwright/internal/spec"
@@ -58,6 +59,7 @@ Usage:
   loadwright version
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
+  loadwright import postman <collection.json> [-o loadwright.yaml] [--base-url https://api.example.com]
   loadwright validate <spec.yaml> [--env-file .env.test]
   loadwright compile <spec.yaml> [-o tests/name.jmx] [--env-file .env.test]
   loadwright run <spec.yaml|test.jmx> [--out-dir results/run] [--env-file .env.test] [--ci]
@@ -277,6 +279,8 @@ func importCommand(args []string, stdout io.Writer, stderr io.Writer) int {
 	switch args[0] {
 	case "openapi":
 		return importOpenAPI(args[1:], stdout, stderr)
+	case "postman":
+		return importPostman(args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unsupported import source: %s\n", args[0])
 		return 2
@@ -300,6 +304,31 @@ func importOpenAPI(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err := spec.WriteFile(imported, output); err != nil {
 		fmt.Fprintf(stderr, "write spec failed: %v\n", err)
 		return 1
+	}
+	fmt.Fprintf(stdout, "wrote %s\n", output)
+	return 0
+}
+
+func importPostman(args []string, stdout io.Writer, stderr io.Writer) int {
+	input, output, baseURL, err := parseImportPostmanArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	result, err := postman.ImportFile(input, postman.Options{BaseURL: baseURL})
+	if err != nil {
+		fmt.Fprintf(stderr, "import failed: %v\n", err)
+		return 1
+	}
+	if output == "" {
+		output = "loadwright.yaml"
+	}
+	if err := spec.WriteFile(result.Spec, output); err != nil {
+		fmt.Fprintf(stderr, "write spec failed: %v\n", err)
+		return 1
+	}
+	for _, warning := range result.Warnings {
+		fmt.Fprintf(stderr, "warning: %s\n", warning)
 	}
 	fmt.Fprintf(stdout, "wrote %s\n", output)
 	return 0
@@ -526,6 +555,14 @@ func parseThresholdValue(flag string, raw string) (float64, error) {
 }
 
 func parseImportOpenAPIArgs(args []string) (input string, output string, baseURL string, err error) {
+	return parseImportArgs("openapi", args)
+}
+
+func parseImportPostmanArgs(args []string) (input string, output string, baseURL string, err error) {
+	return parseImportArgs("postman", args)
+}
+
+func parseImportArgs(source string, args []string) (input string, output string, baseURL string, err error) {
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -553,7 +590,7 @@ func parseImportOpenAPIArgs(args []string) (input string, output string, baseURL
 		}
 	}
 	if len(positional) != 1 {
-		return "", "", "", fmt.Errorf("import openapi requires exactly one input file")
+		return "", "", "", fmt.Errorf("import %s requires exactly one input file", source)
 	}
 	return positional[0], output, baseURL, nil
 }
