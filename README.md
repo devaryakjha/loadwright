@@ -15,7 +15,7 @@ It is not a new load-testing engine. It is a small automation layer that keeps J
 
 Loadwright is at `v0.1.0`. It is usable for HTTP API load-test workflows and CI smoke/performance checks, but the public API and YAML spec may still evolve before `v1.0.0`.
 
-The current development scope is intentionally focused: HTTP requests, Dockerized JMeter execution, OpenAPI/Postman/HAR bootstrapping, CSV data, thresholds, and reports. WebSocket support, plugin management, distributed runners, and AI-assisted workflows are planned later.
+The current development scope is intentionally focused: HTTP requests, JSON/text/form bodies, Dockerized JMeter execution, OpenAPI/Postman/HAR bootstrapping, CSV data, thresholds, and reports. WebSocket support, plugin management, distributed runners, and AI-assisted workflows are planned later.
 
 ## Why This Exists
 

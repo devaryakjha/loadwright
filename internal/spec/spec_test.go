@@ -211,6 +211,56 @@ thresholds:
 	}
 }
 
+func TestLoadFileParsesExplicitBodyShapes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "spec.yaml")
+	yaml := `name: body-shapes
+target: https://example.com
+requests:
+  - method: POST
+    path: /json
+    body_json:
+      ok: true
+  - method: POST
+    path: /text
+    body_text: hello
+  - method: POST
+    path: /form
+    body_form:
+      username: demo
+      password: secret
+`
+	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile() error = %v", err)
+	}
+	if loaded.Requests[0].BodyJSON == nil {
+		t.Fatalf("body_json not parsed: %+v", loaded.Requests[0])
+	}
+	if loaded.Requests[1].BodyText != "hello" {
+		t.Fatalf("body_text = %q", loaded.Requests[1].BodyText)
+	}
+	if loaded.Requests[2].BodyForm["username"] != "demo" || loaded.Requests[2].BodyForm["password"] != "secret" {
+		t.Fatalf("body_form = %+v", loaded.Requests[2].BodyForm)
+	}
+}
+
+func TestRequestRejectsMultipleBodyShapes(t *testing.T) {
+	raw := Request{
+		Method:   "POST",
+		Path:     "/submit",
+		Body:     map[string]any{"legacy": true},
+		BodyForm: map[string]string{"username": "demo"},
+	}
+	err := raw.NormalizeAndValidate(0)
+	if err == nil || !strings.Contains(err.Error(), "must set only one body field") {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+}
+
 func TestResolveVariablesEnvAndBearerAuth(t *testing.T) {
 	raw := Spec{
 		Name:   "{{service}} smoke",
@@ -250,19 +300,18 @@ func TestResolvePreservesJMeterRuntimeVariables(t *testing.T) {
 		Name:   "csv",
 		Target: "https://example.com",
 		Requests: []Request{{
-			Path: "/login",
-			Body: map[string]any{
-				"username": "${username}",
-			},
+			Path:     "/login",
+			BodyForm: map[string]string{"username": "${username}", "password": "{{password}}"},
 		}},
+		Variables: map[string]string{"password": "secret"},
 	}
 	resolved, err := raw.Resolve(nil)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	body := resolved.Requests[0].Body.(map[string]any)
-	if body["username"] != "${username}" {
-		t.Fatalf("runtime variable was not preserved: %+v", body)
+	bodyForm := resolved.Requests[0].BodyForm
+	if bodyForm["username"] != "${username}" || bodyForm["password"] != "secret" {
+		t.Fatalf("body_form not resolved correctly: %+v", bodyForm)
 	}
 }
 

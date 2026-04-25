@@ -36,9 +36,9 @@ func TestImportHARBasics(t *testing.T) {
 	if create.Name != "POST /v1/users" || create.Method != "POST" || create.Path != "/v1/users" {
 		t.Fatalf("unexpected create request: %+v", create)
 	}
-	body := create.Body.(map[string]any)
+	body := create.BodyJSON.(map[string]any)
 	if body["name"] != "Ada" || body["role"] != "admin" {
-		t.Fatalf("body = %+v", body)
+		t.Fatalf("body_json = %+v", body)
 	}
 	if create.Headers["Content-Type"] != "application/json" {
 		t.Fatalf("headers = %+v", create.Headers)
@@ -91,7 +91,7 @@ func TestImportBaseURLOverrideAndWarnings(t *testing.T) {
 	}
 }
 
-func TestImportFormParamsAsStarterBody(t *testing.T) {
+func TestImportFormParamsAsFormBody(t *testing.T) {
 	result, err := Import(Archive{Log: Log{Entries: []Entry{{Request: Request{
 		Method: "POST",
 		URL:    "https://api.example.com/login",
@@ -103,11 +103,11 @@ func TestImportFormParamsAsStarterBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Import() error = %v", err)
 	}
-	body := result.Spec.Requests[0].Body.(map[string]any)
-	if body["username"] != "demo" || body["password"] != "secret" {
-		t.Fatalf("body = %+v", body)
+	bodyForm := result.Spec.Requests[0].BodyForm
+	if bodyForm["username"] != "demo" || bodyForm["password"] != "secret" {
+		t.Fatalf("body_form = %+v", bodyForm)
 	}
-	if !strings.Contains(strings.Join(result.Warnings, "\n"), "POST /login has form params; imported as a flat object starter body") {
+	if len(result.Warnings) != 0 {
 		t.Fatalf("warnings = %+v", result.Warnings)
 	}
 }

@@ -26,6 +26,14 @@ bin/loadwright run examples/api/post-json.yaml --ci
 
 Demonstrates JSON request bodies and custom headers.
 
+## Urlencoded Form
+
+```bash
+bin/loadwright run examples/api/form-urlencoded.yaml --ci
+```
+
+Demonstrates `application/x-www-form-urlencoded` request bodies with `body_form`.
+
 ## Checkout Flow
 
 ```bash

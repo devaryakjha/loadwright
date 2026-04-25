@@ -35,6 +35,46 @@ thresholds:
 - `requests`: required list of HTTP requests.
 - `thresholds`: optional CI pass/fail rules.
 
+## Request Bodies
+
+Use one body field per request.
+
+Legacy `body` remains supported and is rendered as raw body content. Prefer the explicit fields for new specs:
+
+JSON body:
+
+```yaml
+requests:
+  - method: POST
+    path: /users
+    headers:
+      content-type: application/json
+    body_json:
+      name: Ada
+```
+
+Text body:
+
+```yaml
+requests:
+  - method: POST
+    path: /events
+    body_text: plain text payload
+```
+
+Urlencoded form body:
+
+```yaml
+requests:
+  - method: POST
+    path: /login
+    body_form:
+      username: demo
+      password: secret
+```
+
+`body_form` compiles to JMeter HTTP arguments with `HTTPSampler.postBodyRaw=false` and adds `Content-Type: application/x-www-form-urlencoded` when no content type header is already set.
+
 ## Variables
 
 Variables can be referenced with `{{name}}`.

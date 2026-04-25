@@ -376,6 +376,20 @@ func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
         },
         "url": "{{base_url}}/upload"
       }
+    },
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {"key": "username", "value": "demo"},
+            {"key": "password", "value": "secret"}
+          ]
+        },
+        "url": "{{base_url}}/login"
+      }
     }
   ]
 }`
@@ -394,7 +408,9 @@ func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
 	if !strings.Contains(string(data), "target: '{{base_url}}'") ||
 		!strings.Contains(string(data), "name: Create user") ||
 		!strings.Contains(string(data), "name: Ada") ||
-		!strings.Contains(string(data), "title: avatar") {
+		!strings.Contains(string(data), "title: avatar") ||
+		!strings.Contains(string(data), "body_form:") ||
+		!strings.Contains(string(data), "username: demo") {
 		t.Fatalf("unexpected imported spec: %s", data)
 	}
 	if !strings.Contains(stderr.String(), `warning: Upload: form-data file field "avatar" was skipped`) ||

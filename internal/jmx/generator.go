@@ -113,7 +113,7 @@ func writeThreadGroup(b *strings.Builder, s *spec.Spec) {
 func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 	target, _ := url.Parse(s.Target)
 	fmt.Fprintf(b, `        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="%s" enabled="true">`+"\n", esc(r.Name))
-	body := bodyString(r.Body)
+	body := rawBodyString(r)
 	if body != "" {
 		b.WriteString("          <boolProp name=\"HTTPSampler.postBodyRaw\">true</boolProp>\n")
 	} else {
@@ -127,6 +127,8 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 		fmt.Fprintf(b, "                <stringProp name=\"Argument.value\">%s</stringProp>\n", esc(body))
 		b.WriteString("                <stringProp name=\"Argument.metadata\">=</stringProp>\n")
 		b.WriteString("              </elementProp>\n")
+	} else if len(r.BodyForm) > 0 {
+		writeFormArguments(b, r.BodyForm)
 	} else {
 		writeQueryArguments(b, r.Query)
 	}
@@ -151,8 +153,9 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 	fmt.Fprintf(b, "          <stringProp name=\"HTTPSampler.response_timeout\">%s</stringProp>\n", timeoutMS)
 	b.WriteString("        </HTTPSamplerProxy>\n")
 	b.WriteString("        <hashTree>\n")
-	if len(r.Headers) > 0 {
-		writeHeaders(b, r.Headers)
+	headers := requestHeaders(r)
+	if len(headers) > 0 {
+		writeHeaders(b, headers)
 	}
 	if r.Expect.Status > 0 {
 		writeStatusAssertion(b, r.Expect.Status)
@@ -167,6 +170,19 @@ func writeQueryArguments(b *strings.Builder, query map[string]string) {
 		b.WriteString("                <boolProp name=\"HTTPArgument.always_encode\">true</boolProp>\n")
 		fmt.Fprintf(b, "                <stringProp name=\"Argument.name\">%s</stringProp>\n", esc(key))
 		fmt.Fprintf(b, "                <stringProp name=\"Argument.value\">%s</stringProp>\n", esc(query[key]))
+		b.WriteString("                <stringProp name=\"Argument.metadata\">=</stringProp>\n")
+		b.WriteString("                <boolProp name=\"HTTPArgument.use_equals\">true</boolProp>\n")
+		b.WriteString("              </elementProp>\n")
+	}
+}
+
+func writeFormArguments(b *strings.Builder, fields map[string]string) {
+	keys := sortedKeys(fields)
+	for _, key := range keys {
+		fmt.Fprintf(b, "              <elementProp name=\"%s\" elementType=\"HTTPArgument\">\n", esc(key))
+		b.WriteString("                <boolProp name=\"HTTPArgument.always_encode\">true</boolProp>\n")
+		fmt.Fprintf(b, "                <stringProp name=\"Argument.name\">%s</stringProp>\n", esc(key))
+		fmt.Fprintf(b, "                <stringProp name=\"Argument.value\">%s</stringProp>\n", esc(fields[key]))
 		b.WriteString("                <stringProp name=\"Argument.metadata\">=</stringProp>\n")
 		b.WriteString("                <boolProp name=\"HTTPArgument.use_equals\">true</boolProp>\n")
 		b.WriteString("              </elementProp>\n")
@@ -198,6 +214,16 @@ func writeStatusAssertion(b *strings.Builder, status int) {
 	b.WriteString("            <intProp name=\"Assertion.test_type\">8</intProp>\n")
 	b.WriteString("          </ResponseAssertion>\n")
 	b.WriteString("          <hashTree/>\n")
+}
+
+func rawBodyString(r spec.Request) string {
+	if r.BodyText != "" {
+		return r.BodyText
+	}
+	if r.BodyJSON != nil {
+		return bodyString(r.BodyJSON)
+	}
+	return bodyString(r.Body)
 }
 
 func bodyString(body any) string {
@@ -237,6 +263,27 @@ func jsonable(value any) any {
 	default:
 		return value
 	}
+}
+
+func requestHeaders(r spec.Request) map[string]string {
+	if len(r.BodyForm) == 0 || hasHeader(r.Headers, "content-type") {
+		return r.Headers
+	}
+	headers := map[string]string{}
+	for key, value := range r.Headers {
+		headers[key] = value
+	}
+	headers["Content-Type"] = "application/x-www-form-urlencoded"
+	return headers
+}
+
+func hasHeader(headers map[string]string, name string) bool {
+	for key := range headers {
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func esc(value string) string {

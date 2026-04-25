@@ -46,9 +46,9 @@ bin/loadwright report results/manual-smoke/results.jtl --out-dir /tmp/loadwright
 ## Current Coverage Focus
 
 - Spec validation, defaults, variables, env files, auth, and timeout behavior.
-- JMX rendering, including headers, query params, JSON bodies, assertions, duration loads, and timeouts.
+- JMX rendering, including headers, query params, JSON bodies, urlencoded form bodies, assertions, duration loads, and timeouts.
 - JTL parsing, percentile summaries, threshold pass/fail, and report artifacts.
 - JUnit report generation for CI integrations.
 - CLI parsing, non-Docker command flows, and end-to-end run/report generation with a Docker shim.
-- OpenAPI import for YAML, JSON, path/query params, request bodies, and error cases.
+- OpenAPI/Postman/HAR import for YAML, JSON, path/query params, request bodies, and error cases.
 - Runtime helper behavior for doctor/version parsing.

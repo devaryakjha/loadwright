@@ -126,6 +126,40 @@ func TestRenderQueryParamsAndJSONBody(t *testing.T) {
 	}
 }
 
+func TestRenderFormBodyArguments(t *testing.T) {
+	loops := 1
+	loaded := &spec.Spec{
+		Name:   "form body",
+		Target: "https://api.example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:   "login",
+			Method: "POST",
+			Path:   "/login",
+			BodyForm: map[string]string{
+				"password": "secret",
+				"username": "demo",
+			},
+		}},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`<boolProp name="HTTPSampler.postBodyRaw">false</boolProp>`,
+		`<elementProp name="password" elementType="HTTPArgument">`,
+		`<stringProp name="Argument.name">username</stringProp>`,
+		`<stringProp name="Argument.value">demo</stringProp>`,
+		`<stringProp name="Header.name">Content-Type</stringProp>`,
+		`<stringProp name="Header.value">application/x-www-form-urlencoded</stringProp>`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("form JMX missing %q\n%s", expected, rendered)
+		}
+	}
+	if strings.Contains(rendered, `HTTPSampler.postBodyRaw">true`) || strings.Contains(rendered, `{&#34;username&#34;`) {
+		t.Fatalf("form body rendered as raw JSON\n%s", rendered)
+	}
+}
+
 func TestRenderDurationBasedLoad(t *testing.T) {
 	loaded := &spec.Spec{
 		Name:   "duration load",

@@ -219,7 +219,7 @@ func requestFromOperation(method string, path string, operation *Operation, vari
 	}
 	if body, ok := requestBodyExample(operation.RequestBody); ok {
 		request.Headers = map[string]string{"content-type": "application/json"}
-		request.Body = body
+		request.BodyJSON = body
 	}
 	return request
 }

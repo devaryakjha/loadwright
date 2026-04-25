@@ -42,9 +42,9 @@ func TestImportCollectionBasics(t *testing.T) {
 	if create.Method != "POST" || create.Path != "/v1/users" {
 		t.Fatalf("unexpected create request: %+v", create)
 	}
-	body := create.Body.(map[string]any)
+	body := create.BodyJSON.(map[string]any)
 	if body["name"] != "Ada" || body["role"] != "admin" {
-		t.Fatalf("body = %+v", body)
+		t.Fatalf("body_json = %+v", body)
 	}
 	if create.Headers["Content-Type"] != "application/json" {
 		t.Fatalf("headers = %+v", create.Headers)
@@ -107,7 +107,7 @@ func TestImportRequestLevelBasicAuth(t *testing.T) {
 	}
 }
 
-func TestImportURLEncodedBodyAsStarterBody(t *testing.T) {
+func TestImportURLEncodedBodyAsFormBody(t *testing.T) {
 	result, err := Import(Collection{
 		Info: Info{Name: "Forms"},
 		Items: []Item{{
@@ -130,14 +130,14 @@ func TestImportURLEncodedBodyAsStarterBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Import() error = %v", err)
 	}
-	body := result.Spec.Requests[0].Body.(map[string]any)
-	if body["username"] != "demo" || body["password"] != "secret" {
-		t.Fatalf("body = %+v", body)
+	bodyForm := result.Spec.Requests[0].BodyForm
+	if bodyForm["username"] != "demo" || bodyForm["password"] != "secret" {
+		t.Fatalf("body_form = %+v", bodyForm)
 	}
-	if _, exists := body["ignored"]; exists {
-		t.Fatalf("disabled form param imported: %+v", body)
+	if _, exists := bodyForm["ignored"]; exists {
+		t.Fatalf("disabled form param imported: %+v", bodyForm)
 	}
-	if !strings.Contains(strings.Join(result.Warnings, "\n"), "Login: urlencoded body imported as a flat object starter body; review encoding before CI use") {
+	if len(result.Warnings) != 0 {
 		t.Fatalf("warnings = %+v", result.Warnings)
 	}
 }

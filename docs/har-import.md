@@ -20,7 +20,7 @@ bin/loadwright import har capture.har --base-url https://staging.example.com -o 
 - The first request origin becomes `target` unless `--base-url` is provided.
 - Supported requests become Loadwright HTTP requests.
 - Method, path, query params, headers, and JSON/text request bodies are imported.
-- Form params are imported as a flat starter body with a warning.
+- Form params are imported as runnable `body_form` specs.
 - Unsupported or lossy capture details are reported as warnings.
 
 ## Current Limitations
@@ -29,6 +29,6 @@ bin/loadwright import har capture.har --base-url https://staging.example.com -o 
 - Browser replay semantics are not reproduced.
 - Cookies are not imported.
 - File uploads and encoded/binary request bodies are skipped with warnings.
-- Current JMX generation renders imported flat form bodies as raw body content, so review generated form specs before CI use.
+- Multipart form-data is not rendered as multipart JMeter requests yet.
 - Multiple target hosts are imported into a single Loadwright target; review warnings before using the generated spec in CI.
 - Imported specs are starter specs and should be reviewed before CI use.

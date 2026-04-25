@@ -14,6 +14,7 @@
 - Add per-run `run.json` metadata manifests.
 - Import basic OpenAPI HTTP bearer/basic security schemes.
 - Import Postman urlencoded and text form-data bodies as starter bodies with warnings.
+- Add first-class `body_json`, `body_text`, and runnable urlencoded `body_form` request bodies.
 
 ## 0.1.0 - 2026-04-25
 

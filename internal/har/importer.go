@@ -166,13 +166,16 @@ func requestFromHAR(index int, harRequest Request) (spec.Request, string, []stri
 	warnings = append(warnings, bodyWarnings...)
 
 	return spec.Request{
-		Name:    name,
-		Method:  method,
-		Path:    requestPath,
-		Headers: headers,
-		Query:   query,
-		Body:    body,
-		Expect:  spec.Expect{Status: 200},
+		Name:     name,
+		Method:   method,
+		Path:     requestPath,
+		Headers:  headers,
+		Query:    query,
+		Body:     body.Legacy,
+		BodyJSON: body.JSON,
+		BodyText: body.Text,
+		BodyForm: body.Form,
+		Expect:   spec.Expect{Status: 200},
 	}, target, warnings, true
 }
 
@@ -223,24 +226,31 @@ func headersFromHAR(requestName string, headers []NameValue) (map[string]string,
 	return out, warnings
 }
 
-func bodyFromHAR(requestName string, postData *PostData, headers map[string]string) (any, []string) {
+type requestBody struct {
+	Legacy any
+	JSON   any
+	Text   string
+	Form   map[string]string
+}
+
+func bodyFromHAR(requestName string, postData *PostData, headers map[string]string) (requestBody, []string) {
 	if postData == nil {
-		return nil, nil
+		return requestBody{}, nil
 	}
 	if strings.TrimSpace(postData.Encoding) != "" && !strings.EqualFold(postData.Encoding, "utf-8") {
-		return nil, []string{fmt.Sprintf("%s request body uses %s encoding and was skipped", requestName, postData.Encoding)}
+		return requestBody{}, []string{fmt.Sprintf("%s request body uses %s encoding and was skipped", requestName, postData.Encoding)}
 	}
 	if len(postData.Params) > 0 {
 		for _, param := range postData.Params {
 			if strings.TrimSpace(param.FileName) != "" {
-				return nil, []string{fmt.Sprintf("%s has file upload form data; body was skipped", requestName)}
+				return requestBody{}, []string{fmt.Sprintf("%s has file upload form data; body was skipped", requestName)}
 			}
 		}
-		return paramsBody(postData.Params), []string{fmt.Sprintf("%s has form params; imported as a flat object starter body", requestName)}
+		return requestBody{Form: paramsBody(postData.Params)}, nil
 	}
 	text := strings.TrimSpace(postData.Text)
 	if text == "" {
-		return nil, nil
+		return requestBody{}, nil
 	}
 	if shouldParseJSON(text, postData.MimeType, headers) {
 		var parsed any
@@ -248,15 +258,15 @@ func bodyFromHAR(requestName string, postData *PostData, headers map[string]stri
 			if !hasHeader(headers, "content-type") {
 				headers["Content-Type"] = "application/json"
 			}
-			return parsed, nil
+			return requestBody{JSON: parsed}, nil
 		}
-		return text, []string{fmt.Sprintf("%s body looked like JSON but could not be parsed; imported as string", requestName)}
+		return requestBody{Text: text}, []string{fmt.Sprintf("%s body looked like JSON but could not be parsed; imported as string", requestName)}
 	}
-	return text, nil
+	return requestBody{Text: text}, nil
 }
 
-func paramsBody(params []PostParam) map[string]any {
-	out := map[string]any{}
+func paramsBody(params []PostParam) map[string]string {
+	out := map[string]string{}
 	for _, param := range params {
 		key := strings.TrimSpace(param.Name)
 		if key == "" {

@@ -297,14 +297,17 @@ func requestFromPostman(item Item, folders []string, collectionAuth *Auth) (spec
 	}
 
 	return spec.Request{
-		Name:    requestName,
-		Method:  method,
-		Path:    requestPath,
-		Headers: headers,
-		Query:   query,
-		Body:    body,
-		Auth:    requestAuth,
-		Expect:  spec.Expect{Status: 200},
+		Name:     requestName,
+		Method:   method,
+		Path:     requestPath,
+		Headers:  headers,
+		Query:    query,
+		Body:     body.Legacy,
+		BodyJSON: body.JSON,
+		BodyText: body.Text,
+		BodyForm: body.Form,
+		Auth:     requestAuth,
+		Expect:   spec.Expect{Status: 200},
 	}, target, warnings, true
 }
 
@@ -438,15 +441,22 @@ func headersFromPostman(headers []Header) map[string]string {
 	return out
 }
 
-func bodyFromPostman(body Body, headers map[string]string) (any, []string) {
+type requestBody struct {
+	Legacy any
+	JSON   any
+	Text   string
+	Form   map[string]string
+}
+
+func bodyFromPostman(body Body, headers map[string]string) (requestBody, []string) {
 	mode := strings.ToLower(strings.TrimSpace(body.Mode))
 	switch mode {
 	case "":
-		return nil, nil
+		return requestBody{}, nil
 	case "raw":
 		raw := strings.TrimSpace(body.Raw)
 		if raw == "" {
-			return nil, nil
+			return requestBody{}, nil
 		}
 		if shouldParseJSON(raw, body, headers) {
 			var parsed any
@@ -454,31 +464,31 @@ func bodyFromPostman(body Body, headers map[string]string) (any, []string) {
 				if !hasHeader(headers, "content-type") {
 					headers["Content-Type"] = "application/json"
 				}
-				return parsed, nil
+				return requestBody{JSON: parsed}, nil
 			}
-			return raw, []string{"raw body looked like JSON but could not be parsed; imported as string"}
+			return requestBody{Text: raw}, []string{"raw body looked like JSON but could not be parsed; imported as string"}
 		}
-		return raw, nil
+		return requestBody{Text: raw}, nil
 	case "urlencoded":
 		form := formParamsBody(body.URLEncoded)
 		if len(form) == 0 {
-			return nil, nil
+			return requestBody{}, nil
 		}
-		return form, []string{"urlencoded body imported as a flat object starter body; review encoding before CI use"}
+		return requestBody{Form: form}, nil
 	case "formdata":
 		form, warnings := formDataBody(body.FormData)
 		if len(form) == 0 {
-			return nil, warnings
+			return requestBody{}, warnings
 		}
 		warnings = append(warnings, "form-data fields imported as a flat object starter body; review multipart encoding before CI use")
-		return form, warnings
+		return requestBody{Legacy: form}, warnings
 	default:
-		return nil, []string{fmt.Sprintf("request body mode %q is not imported yet", mode)}
+		return requestBody{}, []string{fmt.Sprintf("request body mode %q is not imported yet", mode)}
 	}
 }
 
-func formParamsBody(params []FormParam) map[string]any {
-	out := map[string]any{}
+func formParamsBody(params []FormParam) map[string]string {
+	out := map[string]string{}
 	for _, param := range params {
 		key := strings.TrimSpace(param.Key)
 		if param.Disabled || key == "" {

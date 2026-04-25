@@ -114,15 +114,18 @@ type DataSet struct {
 }
 
 type Request struct {
-	Name    string            `yaml:"name"`
-	Method  string            `yaml:"method"`
-	Path    string            `yaml:"path"`
-	Headers map[string]string `yaml:"headers,omitempty"`
-	Query   map[string]string `yaml:"query,omitempty"`
-	Body    any               `yaml:"body,omitempty"`
-	Auth    Auth              `yaml:"auth,omitempty"`
-	Timeout Duration          `yaml:"timeout,omitempty"`
-	Expect  Expect            `yaml:"expect"`
+	Name     string            `yaml:"name"`
+	Method   string            `yaml:"method"`
+	Path     string            `yaml:"path"`
+	Headers  map[string]string `yaml:"headers,omitempty"`
+	Query    map[string]string `yaml:"query,omitempty"`
+	Body     any               `yaml:"body,omitempty"`
+	BodyJSON any               `yaml:"body_json,omitempty"`
+	BodyText string            `yaml:"body_text,omitempty"`
+	BodyForm map[string]string `yaml:"body_form,omitempty"`
+	Auth     Auth              `yaml:"auth,omitempty"`
+	Timeout  Duration          `yaml:"timeout,omitempty"`
+	Expect   Expect            `yaml:"expect"`
 }
 
 type Auth struct {
@@ -268,8 +271,39 @@ func (r *Request) NormalizeAndValidate(index int) error {
 	if r.Query == nil {
 		r.Query = map[string]string{}
 	}
+	if r.BodyForm == nil {
+		r.BodyForm = map[string]string{}
+	}
+	if err := r.validateBodyFields(index); err != nil {
+		return err
+	}
 	if err := r.Auth.NormalizeAndValidate(fmt.Sprintf("requests[%d].auth", index)); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (r *Request) validateBodyFields(index int) error {
+	var fields []string
+	if r.Body != nil {
+		fields = append(fields, "body")
+	}
+	if r.BodyJSON != nil {
+		fields = append(fields, "body_json")
+	}
+	if strings.TrimSpace(r.BodyText) != "" {
+		fields = append(fields, "body_text")
+	}
+	if len(r.BodyForm) > 0 {
+		fields = append(fields, "body_form")
+		for key := range r.BodyForm {
+			if strings.TrimSpace(key) == "" {
+				return fmt.Errorf("requests[%d].body_form contains an empty field name", index)
+			}
+		}
+	}
+	if len(fields) > 1 {
+		return fmt.Errorf("requests[%d] must set only one body field: %s", index, strings.Join(fields, ", "))
 	}
 	return nil
 }
@@ -410,6 +444,18 @@ func renderRequest(request Request, vars map[string]string, index int) (Request,
 	out.Body, err = renderAny(request.Body, vars)
 	if err != nil {
 		return Request{}, fmt.Errorf("requests[%d].body: %w", index, err)
+	}
+	out.BodyJSON, err = renderAny(request.BodyJSON, vars)
+	if err != nil {
+		return Request{}, fmt.Errorf("requests[%d].body_json: %w", index, err)
+	}
+	out.BodyText, err = renderString(request.BodyText, vars)
+	if err != nil {
+		return Request{}, fmt.Errorf("requests[%d].body_text: %w", index, err)
+	}
+	out.BodyForm, err = renderStringMap(request.BodyForm, vars)
+	if err != nil {
+		return Request{}, fmt.Errorf("requests[%d].body_form: %w", index, err)
 	}
 	out.Auth, err = renderAuth(request.Auth, vars, fmt.Sprintf("requests[%d].auth", index))
 	if err != nil {

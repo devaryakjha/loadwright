@@ -40,9 +40,9 @@ func TestImportYAMLOperations(t *testing.T) {
 	if post.Name != "createPet" || post.Method != "POST" || post.Expect.Status != 201 {
 		t.Fatalf("unexpected POST request: %+v", post)
 	}
-	body := post.Body.(map[string]any)
+	body := post.BodyJSON.(map[string]any)
 	if body["name"] != "example" || body["tag"] != "example" {
-		t.Fatalf("unexpected body: %+v", body)
+		t.Fatalf("unexpected body_json: %+v", body)
 	}
 }
 
@@ -121,7 +121,7 @@ func TestImportExamplesAndSchemaFallbacks(t *testing.T) {
 	for index, request := range imported.Requests {
 		requests[request.Name] = index
 	}
-	body := imported.Requests[requests["POST /items"]].Body.(map[string]any)
+	body := imported.Requests[requests["POST /items"]].BodyJSON.(map[string]any)
 	if body["name"] != "from-example" {
 		t.Fatalf("example body not used: %+v", body)
 	}
