@@ -107,6 +107,81 @@ func TestImportRequestLevelBasicAuth(t *testing.T) {
 	}
 }
 
+func TestImportURLEncodedBodyAsStarterBody(t *testing.T) {
+	result, err := Import(Collection{
+		Info: Info{Name: "Forms"},
+		Items: []Item{{
+			Name: "Login",
+			Request: Request{
+				Set:    true,
+				Method: "POST",
+				URL:    URL{Raw: "https://api.example.com/login"},
+				Body: Body{
+					Mode: "urlencoded",
+					URLEncoded: []FormParam{
+						{Key: "username", Value: "demo"},
+						{Key: "password", Value: "secret"},
+						{Key: "ignored", Value: "nope", Disabled: true},
+					},
+				},
+			},
+		}},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	body := result.Spec.Requests[0].Body.(map[string]any)
+	if body["username"] != "demo" || body["password"] != "secret" {
+		t.Fatalf("body = %+v", body)
+	}
+	if _, exists := body["ignored"]; exists {
+		t.Fatalf("disabled form param imported: %+v", body)
+	}
+	if !strings.Contains(strings.Join(result.Warnings, "\n"), "Login: urlencoded body imported as a flat object starter body; review encoding before CI use") {
+		t.Fatalf("warnings = %+v", result.Warnings)
+	}
+}
+
+func TestImportFormDataBodySkipsFileFields(t *testing.T) {
+	result, err := Import(Collection{
+		Info: Info{Name: "Multipart"},
+		Items: []Item{{
+			Name: "Upload",
+			Request: Request{
+				Set:    true,
+				Method: "POST",
+				URL:    URL{Raw: "https://api.example.com/upload"},
+				Body: Body{
+					Mode: "formdata",
+					FormData: []FormParam{
+						{Key: "title", Value: "avatar"},
+						{Key: "avatar", Type: "file", Src: "/tmp/avatar.png"},
+					},
+				},
+			},
+		}},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	body := result.Spec.Requests[0].Body.(map[string]any)
+	if body["title"] != "avatar" {
+		t.Fatalf("body = %+v", body)
+	}
+	if _, exists := body["avatar"]; exists {
+		t.Fatalf("file field imported: %+v", body)
+	}
+	joined := strings.Join(result.Warnings, "\n")
+	for _, expected := range []string{
+		`Upload: form-data file field "avatar" was skipped`,
+		"Upload: form-data fields imported as a flat object starter body; review multipart encoding before CI use",
+	} {
+		if !strings.Contains(joined, expected) {
+			t.Fatalf("missing warning %q in %+v", expected, result.Warnings)
+		}
+	}
+}
+
 func TestImportWarnsForUnsupportedFeatures(t *testing.T) {
 	result, err := Import(Collection{
 		Info: Info{Name: "Unsupported"},

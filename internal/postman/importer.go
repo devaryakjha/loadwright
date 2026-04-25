@@ -133,9 +133,11 @@ type QueryParam struct {
 }
 
 type Body struct {
-	Mode    string      `json:"mode"`
-	Raw     string      `json:"raw"`
-	Options BodyOptions `json:"options"`
+	Mode       string      `json:"mode"`
+	Raw        string      `json:"raw"`
+	URLEncoded []FormParam `json:"urlencoded"`
+	FormData   []FormParam `json:"formdata"`
+	Options    BodyOptions `json:"options"`
 }
 
 type BodyOptions struct {
@@ -144,6 +146,14 @@ type BodyOptions struct {
 
 type RawBodyOptions struct {
 	Language string `json:"language"`
+}
+
+type FormParam struct {
+	Key      string `json:"key"`
+	Value    any    `json:"value"`
+	Type     string `json:"type"`
+	Disabled bool   `json:"disabled"`
+	Src      any    `json:"src"`
 }
 
 type Auth struct {
@@ -449,8 +459,63 @@ func bodyFromPostman(body Body, headers map[string]string) (any, []string) {
 			return raw, []string{"raw body looked like JSON but could not be parsed; imported as string"}
 		}
 		return raw, nil
+	case "urlencoded":
+		form := formParamsBody(body.URLEncoded)
+		if len(form) == 0 {
+			return nil, nil
+		}
+		return form, []string{"urlencoded body imported as a flat object starter body; review encoding before CI use"}
+	case "formdata":
+		form, warnings := formDataBody(body.FormData)
+		if len(form) == 0 {
+			return nil, warnings
+		}
+		warnings = append(warnings, "form-data fields imported as a flat object starter body; review multipart encoding before CI use")
+		return form, warnings
 	default:
 		return nil, []string{fmt.Sprintf("request body mode %q is not imported yet", mode)}
+	}
+}
+
+func formParamsBody(params []FormParam) map[string]any {
+	out := map[string]any{}
+	for _, param := range params {
+		key := strings.TrimSpace(param.Key)
+		if param.Disabled || key == "" {
+			continue
+		}
+		out[key] = stringify(param.Value)
+	}
+	return out
+}
+
+func formDataBody(params []FormParam) (map[string]any, []string) {
+	out := map[string]any{}
+	var warnings []string
+	for _, param := range params {
+		key := strings.TrimSpace(param.Key)
+		if param.Disabled || key == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(param.Type), "file") || hasFormFileSource(param.Src) {
+			warnings = append(warnings, fmt.Sprintf("form-data file field %q was skipped", key))
+			continue
+		}
+		out[key] = stringify(param.Value)
+	}
+	return out, warnings
+}
+
+func hasFormFileSource(value any) bool {
+	switch typed := value.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(typed) != ""
+	case []any:
+		return len(typed) > 0
+	default:
+		return true
 	}
 }
 

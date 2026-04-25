@@ -20,15 +20,17 @@ bin/loadwright import postman collection.json --base-url https://staging.example
 - Collection variables become Loadwright variables.
 - Folders are included in request names.
 - Supported requests become Loadwright HTTP requests.
-- Method, path, query params, headers, and raw JSON/text bodies are imported.
+- Method, path, query params, headers, raw JSON/text bodies, urlencoded fields, and text form-data fields are imported.
 - Collection-level bearer/basic auth becomes global Loadwright auth.
 - Request-level bearer/basic auth becomes request auth.
 - Postman variables such as `{{base_url}}` remain reviewable in the YAML output.
+- Urlencoded and form-data fields are imported as flat starter bodies with warnings.
 
 ## Current Limitations
 
 - Postman Collection v2.1 JSON only.
 - Postman pre-request scripts and tests are not executed or translated.
-- Form-data, urlencoded, file, GraphQL, and advanced auth modes are reported as warnings and skipped where needed.
+- File uploads, GraphQL, and advanced auth modes are reported as warnings and skipped where needed.
+- Current JMX generation renders imported flat form bodies as raw body content, so review generated form specs before CI use.
 - Multiple target hosts are imported into a single Loadwright target; review warnings before using the generated spec in CI.
 - Imported specs are starter specs and should be reviewed before CI use.

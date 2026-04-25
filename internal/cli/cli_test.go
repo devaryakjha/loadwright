@@ -367,7 +367,13 @@ func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
       "name": "Upload",
       "request": {
         "method": "POST",
-        "body": {"mode": "formdata"},
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {"key": "title", "value": "avatar"},
+            {"key": "avatar", "type": "file", "src": "/tmp/avatar.png"}
+          ]
+        },
         "url": "{{base_url}}/upload"
       }
     }
@@ -387,10 +393,12 @@ func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "target: '{{base_url}}'") ||
 		!strings.Contains(string(data), "name: Create user") ||
-		!strings.Contains(string(data), "name: Ada") {
+		!strings.Contains(string(data), "name: Ada") ||
+		!strings.Contains(string(data), "title: avatar") {
 		t.Fatalf("unexpected imported spec: %s", data)
 	}
-	if !strings.Contains(stderr.String(), `warning: Upload: request body mode "formdata" is not imported yet`) {
+	if !strings.Contains(stderr.String(), `warning: Upload: form-data file field "avatar" was skipped`) ||
+		!strings.Contains(stderr.String(), "warning: Upload: form-data fields imported as a flat object starter body; review multipart encoding before CI use") {
 		t.Fatalf("expected warning, got stderr=%s", stderr.String())
 	}
 }

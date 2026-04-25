@@ -29,5 +29,6 @@ bin/loadwright import har capture.har --base-url https://staging.example.com -o 
 - Browser replay semantics are not reproduced.
 - Cookies are not imported.
 - File uploads and encoded/binary request bodies are skipped with warnings.
+- Current JMX generation renders imported flat form bodies as raw body content, so review generated form specs before CI use.
 - Multiple target hosts are imported into a single Loadwright target; review warnings before using the generated spec in CI.
 - Imported specs are starter specs and should be reviewed before CI use.
