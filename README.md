@@ -73,6 +73,7 @@ Reports are written to `results/<run-id>/`:
 - `summary.md`
 - `index.html`
 - `junit.xml`
+- `run.json`
 
 Default runs also update `results/latest.json` so the newest report can be found without copying the timestamped run ID.
 

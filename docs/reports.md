@@ -15,6 +15,30 @@ bin/loadwright report results/manual-smoke/results.jtl --out-dir results/manual-
 - `summary.md`: concise Markdown summary
 - `index.html`: standalone human-readable report
 - `junit.xml`: CI-friendly JUnit report for sample and threshold failures
+- `run.json`: metadata about the run input, JMeter image, timings, and artifact paths
+
+`run.json` does not record environment variable values or env-file contents.
+
+```json
+{
+  "run_id": "20260425-120000",
+  "input": "loadwright.yaml",
+  "input_type": "yaml",
+  "jmx": "results/20260425-120000/example-api.jmx",
+  "generated_jmx": true,
+  "image": "justb4/jmeter:latest",
+  "ci": true,
+  "started_at": "2026-04-25T12:00:00Z",
+  "finished_at": "2026-04-25T12:00:10Z",
+  "artifacts": {
+    "results_jtl": "results/20260425-120000/results.jtl",
+    "summary_json": "results/20260425-120000/summary.json",
+    "summary_md": "results/20260425-120000/summary.md",
+    "report_html": "results/20260425-120000/index.html",
+    "junit_xml": "results/20260425-120000/junit.xml"
+  }
+}
+```
 
 When `loadwright run` uses the default output directory, Loadwright also writes `results/latest.json`:
 

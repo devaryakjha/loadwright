@@ -33,6 +33,7 @@ The run writes artifacts to `results/<run-id>/`:
 - `summary.md`
 - `index.html`
 - `junit.xml`
+- `run.json`
 
 Default runs also update `results/latest.json`, and create a best-effort `results/latest` symlink on platforms that support it.
 
