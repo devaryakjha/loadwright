@@ -16,10 +16,12 @@ type Options struct {
 }
 
 type Document struct {
-	OpenAPI string              `json:"openapi" yaml:"openapi"`
-	Info    Info                `json:"info" yaml:"info"`
-	Servers []Server            `json:"servers" yaml:"servers"`
-	Paths   map[string]PathItem `json:"paths" yaml:"paths"`
+	OpenAPI    string                `json:"openapi" yaml:"openapi"`
+	Info       Info                  `json:"info" yaml:"info"`
+	Servers    []Server              `json:"servers" yaml:"servers"`
+	Components Components            `json:"components" yaml:"components"`
+	Security   []SecurityRequirement `json:"security" yaml:"security"`
+	Paths      map[string]PathItem   `json:"paths" yaml:"paths"`
 }
 
 type Info struct {
@@ -70,6 +72,20 @@ type Example struct {
 }
 
 type Response struct{}
+
+type Components struct {
+	SecuritySchemes map[string]SecurityScheme `json:"securitySchemes" yaml:"securitySchemes"`
+}
+
+type SecurityRequirement map[string][]string
+
+type SecurityScheme struct {
+	Type         string `json:"type" yaml:"type"`
+	Scheme       string `json:"scheme" yaml:"scheme"`
+	BearerFormat string `json:"bearerFormat" yaml:"bearerFormat"`
+	In           string `json:"in" yaml:"in"`
+	Name         string `json:"name" yaml:"name"`
+}
 
 type Schema struct {
 	Type       string            `json:"type" yaml:"type"`
@@ -132,6 +148,7 @@ func Import(doc Document, options Options) (*spec.Spec, error) {
 			P95MsLT:     &p95,
 		},
 	}
+	out.Auth = authFromSecurity(doc, out.Variables)
 
 	for _, path := range sortedPathKeys(doc.Paths) {
 		item := doc.Paths[path]
@@ -205,6 +222,45 @@ func requestFromOperation(method string, path string, operation *Operation, vari
 		request.Body = body
 	}
 	return request
+}
+
+func authFromSecurity(doc Document, variables map[string]string) spec.Auth {
+	for _, requirement := range doc.Security {
+		for schemeName := range requirement {
+			scheme, ok := doc.Components.SecuritySchemes[schemeName]
+			if !ok {
+				continue
+			}
+			auth := authFromSecurityScheme(scheme, variables)
+			if !auth.IsZero() {
+				return auth
+			}
+		}
+	}
+	return spec.Auth{}
+}
+
+func authFromSecurityScheme(scheme SecurityScheme, variables map[string]string) spec.Auth {
+	if !strings.EqualFold(strings.TrimSpace(scheme.Type), "http") {
+		return spec.Auth{}
+	}
+	switch strings.ToLower(strings.TrimSpace(scheme.Scheme)) {
+	case "bearer":
+		if _, exists := variables["api_token"]; !exists {
+			variables["api_token"] = "replace-me"
+		}
+		return spec.Auth{Type: "bearer", Token: "{{api_token}}"}
+	case "basic":
+		if _, exists := variables["basic_username"]; !exists {
+			variables["basic_username"] = "replace-me"
+		}
+		if _, exists := variables["basic_password"]; !exists {
+			variables["basic_password"] = "replace-me"
+		}
+		return spec.Auth{Type: "basic", Username: "{{basic_username}}", Password: "{{basic_password}}"}
+	default:
+		return spec.Auth{}
+	}
 }
 
 func parameterExample(parameter Parameter) string {
