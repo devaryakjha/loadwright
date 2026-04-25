@@ -623,7 +623,7 @@ thresholds:
 	if code != 0 {
 		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
 	}
-	for _, name := range []string{"shim-run.jmx", "results.jtl", "summary.json", "summary.md", "index.html", "junit.xml"} {
+	for _, name := range []string{"shim-run.jmx", "results.jtl", "summary.json", "summary.md", "index.html", "junit.xml", "run.json"} {
 		if _, err := os.Stat(filepath.Join("results", "smoke", name)); err != nil {
 			t.Fatalf("expected %s: %v", name, err)
 		}
@@ -635,6 +635,23 @@ thresholds:
 	if !strings.Contains(string(summary), `"total_samples": 1`) ||
 		!strings.Contains(string(summary), `"failed": 0`) {
 		t.Fatalf("unexpected summary: %s", summary)
+	}
+	manifest := readRunManifest(t, filepath.Join("results", "smoke", "run.json"))
+	if manifest.RunID != "smoke" || manifest.Input != "spec.yaml" || manifest.InputType != "yaml" || !manifest.GeneratedJMX {
+		t.Fatalf("unexpected run manifest: %+v", manifest)
+	}
+	if manifest.JMX != filepath.ToSlash(filepath.Join("results", "smoke", "shim-run.jmx")) {
+		t.Fatalf("unexpected JMX path: %+v", manifest)
+	}
+	if manifest.Image != "justb4/jmeter:latest" || !manifest.CI {
+		t.Fatalf("unexpected run flags: %+v", manifest)
+	}
+	if manifest.Artifacts.ReportHTML != filepath.ToSlash(filepath.Join("results", "smoke", "index.html")) ||
+		manifest.Artifacts.ResultsJTL != filepath.ToSlash(filepath.Join("results", "smoke", "results.jtl")) {
+		t.Fatalf("unexpected artifacts: %+v", manifest.Artifacts)
+	}
+	if manifest.StartedAt == "" || manifest.FinishedAt == "" {
+		t.Fatalf("expected timestamps: %+v", manifest)
 	}
 }
 
@@ -671,6 +688,10 @@ requests:
 	}
 	if _, err := os.Stat(filepath.FromSlash(metadata.Report)); err != nil {
 		t.Fatalf("expected latest report path to exist: %v", err)
+	}
+	manifest := readRunManifest(t, filepath.Join("results", metadata.RunID, "run.json"))
+	if manifest.RunID != metadata.RunID || manifest.Artifacts.ReportHTML != metadata.Report {
+		t.Fatalf("latest metadata and run manifest disagree: latest=%+v run=%+v", metadata, manifest)
 	}
 }
 
@@ -731,6 +752,67 @@ thresholds:
 	}
 }
 
+func TestRunExistingJMXCreatesRunManifest(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	if err := os.WriteFile("existing.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "existing.jmx", "--out-dir", "results/jmx-smoke", "--image", "custom:jmeter"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run existing JMX) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	manifest := readRunManifest(t, filepath.Join("results", "jmx-smoke", "run.json"))
+	if manifest.Input != "existing.jmx" || manifest.InputType != "jmx" || manifest.GeneratedJMX {
+		t.Fatalf("unexpected JMX manifest: %+v", manifest)
+	}
+	if manifest.JMX != "existing.jmx" || manifest.Image != "custom:jmeter" || manifest.CI {
+		t.Fatalf("unexpected JMX manifest fields: %+v", manifest)
+	}
+}
+
+func TestRunManifestDoesNotIncludeEnvValues(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: secret-run
+target: https://example.com
+variables:
+  token: ${API_TOKEN}
+auth:
+  type: bearer
+  token: "{{token}}"
+requests:
+  - path: /secure
+`
+	if err := os.WriteFile("spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".env.test", []byte("API_TOKEN=super-secret-token\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "spec.yaml", "--env-file", ".env.test", "--out-dir", "results/secret"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(filepath.Join("results", "secret", "run.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "super-secret-token") || strings.Contains(string(data), "API_TOKEN") || strings.Contains(string(data), ".env.test") {
+		t.Fatalf("run manifest leaked env data: %s", data)
+	}
+}
+
 func chdir(t *testing.T, dir string) {
 	t.Helper()
 	previous, err := os.Getwd()
@@ -758,6 +840,19 @@ func readLatestRun(t *testing.T, path string) latestRun {
 		t.Fatal(err)
 	}
 	return metadata
+}
+
+func readRunManifest(t *testing.T, path string) runManifest {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest runManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	return manifest
 }
 
 func installDockerShim(t *testing.T, dir string) {
