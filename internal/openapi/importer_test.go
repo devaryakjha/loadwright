@@ -131,6 +131,72 @@ func TestImportExamplesAndSchemaFallbacks(t *testing.T) {
 	}
 }
 
+func TestImportGlobalBearerSecurity(t *testing.T) {
+	imported, err := Import(Document{
+		OpenAPI: "3.0.3",
+		Info:    Info{Title: "Bearer API"},
+		Components: Components{SecuritySchemes: map[string]SecurityScheme{
+			"bearerAuth": {Type: "http", Scheme: "bearer", BearerFormat: "JWT"},
+		}},
+		Security: []SecurityRequirement{{"bearerAuth": {}}},
+		Paths: map[string]PathItem{
+			"/secure": {Get: &Operation{Responses: map[string]Response{"200": {}}}},
+		},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if imported.Auth.Type != "bearer" || imported.Auth.Token != "{{api_token}}" {
+		t.Fatalf("auth = %+v", imported.Auth)
+	}
+	if imported.Variables["api_token"] != "replace-me" {
+		t.Fatalf("api_token variable = %q", imported.Variables["api_token"])
+	}
+}
+
+func TestImportGlobalBasicSecurity(t *testing.T) {
+	imported, err := Import(Document{
+		OpenAPI: "3.0.3",
+		Info:    Info{Title: "Basic API"},
+		Components: Components{SecuritySchemes: map[string]SecurityScheme{
+			"basicAuth": {Type: "http", Scheme: "basic"},
+		}},
+		Security: []SecurityRequirement{{"basicAuth": {}}},
+		Paths: map[string]PathItem{
+			"/secure": {Get: &Operation{Responses: map[string]Response{"200": {}}}},
+		},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if imported.Auth.Type != "basic" || imported.Auth.Username != "{{basic_username}}" || imported.Auth.Password != "{{basic_password}}" {
+		t.Fatalf("auth = %+v", imported.Auth)
+	}
+	if imported.Variables["basic_username"] != "replace-me" || imported.Variables["basic_password"] != "replace-me" {
+		t.Fatalf("variables = %+v", imported.Variables)
+	}
+}
+
+func TestImportIgnoresUnsupportedSecuritySchemes(t *testing.T) {
+	imported, err := Import(Document{
+		OpenAPI: "3.0.3",
+		Info:    Info{Title: "API Key API"},
+		Components: Components{SecuritySchemes: map[string]SecurityScheme{
+			"apiKey": {Type: "apiKey", In: "header", Name: "X-API-Key"},
+		}},
+		Security: []SecurityRequirement{{"apiKey": {}}},
+		Paths: map[string]PathItem{
+			"/secure": {Get: &Operation{Responses: map[string]Response{"200": {}}}},
+		},
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	if !imported.Auth.IsZero() {
+		t.Fatalf("unsupported auth should not be imported: %+v", imported.Auth)
+	}
+}
+
 const petstoreLiteYAML = `openapi: 3.0.3
 info:
   title: Petstore Lite

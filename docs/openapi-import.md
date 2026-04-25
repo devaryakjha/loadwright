@@ -20,11 +20,13 @@ bin/loadwright import openapi openapi.yaml --base-url https://staging.example.co
 - Path parameters become Loadwright variables.
 - Query parameters become request query values.
 - JSON request bodies get a basic example body from examples or schema properties.
+- Global HTTP bearer/basic security requirements become Loadwright auth helpers.
 - The first `2xx` response becomes the expected status.
 
 ## Current Limitations
 
 - OpenAPI 3.x only.
 - `$ref` resolution is not implemented yet.
-- Security schemes are not imported yet.
+- Operation-level security overrides are not imported yet.
+- OAuth, API key, and non-HTTP security schemes are not imported yet.
 - Imported specs are starter specs and should be reviewed before CI use.

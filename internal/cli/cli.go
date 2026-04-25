@@ -191,8 +191,9 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
+	startedAt := time.Now().UTC()
 	updateLatest := outputDir == ""
-	runID := time.Now().UTC().Format("20060102-150405")
+	runID := startedAt.Format("20060102-150405")
 	if outputDir == "" {
 		outputDir = filepath.Join("results", runID)
 	}
@@ -203,6 +204,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 
 	var thresholds spec.Thresholds
 	jmxPath := input
+	generatedJMX := false
 	workDir := "."
 	if isYAML(input) {
 		loaded, err := loadResolvedSpec(input, envFile)
@@ -216,6 +218,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "compile failed: %v\n", err)
 			return 1
 		}
+		generatedJMX = true
 		workDir = outputDir
 		fmt.Fprintf(stdout, "compiled %s\n", jmxPath)
 	}
@@ -242,8 +245,30 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "write report failed: %v\n", err)
 		return 1
 	}
+	finishedAt := time.Now().UTC()
+	if err := writeRunManifest(runManifest{
+		RunID:        filepath.Base(outputDir),
+		Input:        filepath.ToSlash(input),
+		InputType:    runInputType(input),
+		JMX:          filepath.ToSlash(jmxPath),
+		GeneratedJMX: generatedJMX,
+		Image:        image,
+		CI:           ci,
+		StartedAt:    startedAt.Format(time.RFC3339),
+		FinishedAt:   finishedAt.Format(time.RFC3339),
+		Artifacts: runArtifacts{
+			ResultsJTL:  filepath.ToSlash(filepath.Join(outputDir, jtlName)),
+			SummaryJSON: filepath.ToSlash(filepath.Join(outputDir, "summary.json")),
+			SummaryMD:   filepath.ToSlash(filepath.Join(outputDir, "summary.md")),
+			ReportHTML:  filepath.ToSlash(filepath.Join(outputDir, "index.html")),
+			JUnitXML:    filepath.ToSlash(filepath.Join(outputDir, "junit.xml")),
+		},
+	}, outputDir); err != nil {
+		fmt.Fprintf(stderr, "write run metadata failed: %v\n", err)
+		return 1
+	}
 	if updateLatest {
-		if err := writeLatestRun("results", outputDir, time.Now().UTC()); err != nil {
+		if err := writeLatestRun("results", outputDir, finishedAt); err != nil {
 			fmt.Fprintf(stderr, "warning: update latest run pointer: %v\n", err)
 		}
 	}
@@ -253,6 +278,43 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+type runManifest struct {
+	RunID        string       `json:"run_id"`
+	Input        string       `json:"input"`
+	InputType    string       `json:"input_type"`
+	JMX          string       `json:"jmx"`
+	GeneratedJMX bool         `json:"generated_jmx"`
+	Image        string       `json:"image"`
+	CI           bool         `json:"ci"`
+	StartedAt    string       `json:"started_at"`
+	FinishedAt   string       `json:"finished_at"`
+	Artifacts    runArtifacts `json:"artifacts"`
+}
+
+type runArtifacts struct {
+	ResultsJTL  string `json:"results_jtl"`
+	SummaryJSON string `json:"summary_json"`
+	SummaryMD   string `json:"summary_md"`
+	ReportHTML  string `json:"report_html"`
+	JUnitXML    string `json:"junit_xml"`
+}
+
+func writeRunManifest(manifest runManifest, outputDir string) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(outputDir, "run.json"), data, 0o644)
+}
+
+func runInputType(path string) string {
+	if isYAML(path) {
+		return "yaml"
+	}
+	return "jmx"
 }
 
 type latestRun struct {
