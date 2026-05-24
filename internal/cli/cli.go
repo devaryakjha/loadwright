@@ -140,7 +140,22 @@ func initSpec(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	fmt.Fprintf(stdout, "created %s\n", path)
+	quotedPath := shellArg(path)
+	fmt.Fprintf(stdout, "\nNext steps:\n")
+	fmt.Fprintf(stdout, "  loadwright validate %s\n", quotedPath)
+	fmt.Fprintf(stdout, "  loadwright compile %s\n", quotedPath)
+	fmt.Fprintf(stdout, "  loadwright run %s --ci\n", quotedPath)
 	return 0
+}
+
+func shellArg(value string) string {
+	if value == "" {
+		return "''"
+	}
+	if !strings.ContainsAny(value, " \t\n'\"\\$`!#&();<>|*?[]{}") {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
 
 func compile(args []string, stdout io.Writer, stderr io.Writer) int {

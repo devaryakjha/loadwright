@@ -2,6 +2,8 @@
 
 The `examples/` directory contains runnable specs for common scenarios.
 
+Run `loadwright doctor --deep` once before running HTTP examples for the first time. WebSocket examples need the plugin-enabled image shown in the WebSocket section.
+
 ## Basic API
 
 ```bash

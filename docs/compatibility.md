@@ -24,6 +24,13 @@ justb4/jmeter:latest
 
 Use `loadwright doctor --deep` to verify that the configured image starts on your machine.
 
+WebSocket specs require the bundled plugin-enabled image until plugin setup is automated:
+
+```bash
+docker build -t loadwright/jmeter-websocket:latest -f docker/jmeter/Dockerfile .
+loadwright doctor --deep --image loadwright/jmeter-websocket:latest
+```
+
 ## Docker
 
 Docker is required for `loadwright run` and `loadwright doctor --deep`.
@@ -34,6 +41,8 @@ Docker is not required for:
 - `loadwright validate`
 - `loadwright compile`
 - `loadwright import openapi`
+- `loadwright import postman`
+- `loadwright import har`
 - `loadwright report`
 
 ## Spec Stability

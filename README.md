@@ -13,9 +13,9 @@ It is not a new load-testing engine. It is a small automation layer that keeps J
 
 ## Project Status
 
-Loadwright is at `v0.1.0`. It is usable for HTTP API load-test workflows and CI smoke/performance checks, but the public API and YAML spec may still evolve before `v1.0.0`.
+Loadwright is at `v0.2.0`. It is usable for HTTP API, WebSocket API, and CI smoke/performance checks, but the public API and YAML spec may still evolve before `v1.0.0`.
 
-The current development scope is intentionally focused: HTTP requests, WebSocket requests, JSON/text/form bodies, Dockerized JMeter execution, OpenAPI/Postman/HAR bootstrapping, CSV data, thresholds, and reports. Plugin management, distributed runners, and AI-assisted workflows are planned later.
+The current development scope is intentionally focused: HTTP requests, WebSocket requests, JSON/text/urlencoded/multipart bodies, Dockerized JMeter execution, OpenAPI/Postman/HAR bootstrapping, CSV data, thresholds, and reports. Automated plugin management, distributed runners, and AI-assisted workflows are planned later.
 
 ## Why This Exists
 
@@ -32,38 +32,46 @@ Use Loadwright when you want:
 - HAR-to-spec bootstrapping from browser/API traffic captures
 - future optional AI assistance without depending on AI for normal runs
 
-Current `v0.1.0` scope: API load tests (HTTP and WebSocket). See [docs/limitations.md](docs/limitations.md) for known limits.
+Current `v0.2.0` scope: API load tests (HTTP and WebSocket). See [docs/limitations.md](docs/limitations.md) for known limits.
 
-## Install From Source
+## Install
 
-Requires Go 1.22+ and Docker.
+Install the latest release binary from [GitHub Releases](https://github.com/devaryakjha/loadwright/releases), or use Go:
+
+```bash
+go install github.com/devaryakjha/loadwright/cmd/loadwright@v0.2.0
+```
+
+From a source checkout:
 
 ```bash
 go build -o bin/loadwright ./cmd/loadwright
 ```
 
+Docker is required for `loadwright run` and `loadwright doctor --deep`. It is not required for `init`, `validate`, `compile`, `import`, or `report`.
+
 ## Quickstart
 
-Create a starter spec:
+Check the CLI and local prerequisites:
 
 ```bash
-bin/loadwright init
+loadwright version
+loadwright doctor
 ```
 
-Or use the included example:
+Create a starter spec, then validate and compile it without starting Docker:
 
 ```bash
-bin/loadwright doctor
-bin/loadwright validate examples/api/basic.yaml
-bin/loadwright compile examples/api/basic.yaml -o tests/httpbin-basic.jmx
-bin/loadwright run examples/api/basic.yaml --ci
+loadwright init
+loadwright validate loadwright.yaml
+loadwright compile loadwright.yaml
 ```
 
-Check local prerequisites:
+Run the starter spec through Dockerized JMeter:
 
 ```bash
-bin/loadwright doctor
-bin/loadwright doctor --deep
+loadwright doctor --deep
+loadwright run loadwright.yaml --ci
 ```
 
 Reports are written to `results/<run-id>/`:
@@ -76,6 +84,13 @@ Reports are written to `results/<run-id>/`:
 - `run.json`
 
 Default runs also update `results/latest.json` so the newest report can be found without copying the timestamped run ID.
+
+From a source checkout, you can also run the included examples:
+
+```bash
+loadwright validate examples/api/basic.yaml
+loadwright run examples/api/basic.yaml --ci
+```
 
 ## Example Spec
 
@@ -104,6 +119,7 @@ More docs:
 - [Getting started](docs/getting-started.md)
 - [Install](docs/install.md)
 - [Examples](docs/examples.md)
+- [Troubleshooting](docs/troubleshooting.md)
 - [OpenAPI import](docs/openapi-import.md)
 - [Postman import](docs/postman-import.md)
 - [HAR import](docs/har-import.md)

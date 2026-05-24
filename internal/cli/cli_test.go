@@ -208,6 +208,24 @@ func TestRunInitCreatesStarterSpec(t *testing.T) {
 	if !strings.Contains(string(data), "name: example-api") {
 		t.Fatalf("unexpected starter spec: %s", data)
 	}
+	if !strings.Contains(stdout.String(), "loadwright validate loadwright.yaml") ||
+		!strings.Contains(stdout.String(), "loadwright run loadwright.yaml --ci") {
+		t.Fatalf("init output did not include next steps: %s", stdout.String())
+	}
+}
+
+func TestRunInitQuotesNextStepPath(t *testing.T) {
+	dir := t.TempDir()
+	chdir(t, dir)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"init", "first spec.yaml"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(init) code=%d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "loadwright validate 'first spec.yaml'") ||
+		!strings.Contains(stdout.String(), "loadwright run 'first spec.yaml' --ci") {
+		t.Fatalf("init output did not quote path: %s", stdout.String())
+	}
 }
 
 func TestRunCompileCreatesJMX(t *testing.T) {

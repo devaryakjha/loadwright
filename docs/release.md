@@ -47,7 +47,7 @@ Pushing the tag triggers `.github/workflows/release.yml`, which publishes GitHub
 
 - Confirm the GitHub Release has archives for macOS, Linux, and Windows.
 - Confirm `checksums.txt` exists.
-- Confirm the container image exists in GHCR.
+- Confirm the container image exists in GHCR and is publicly pullable before documenting it as an install path.
 - Run a downloaded binary with `loadwright version`.
 - Confirm `summary.json`, `summary.md`, `index.html`, and `junit.xml` are produced by the release smoke test.
 - Create a follow-up issue for anything deferred from the release.
