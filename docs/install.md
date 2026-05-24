@@ -49,10 +49,10 @@ bin/loadwright version
 
 The release workflow builds `ghcr.io/devaryakjha/loadwright`, but the recommended first-run path is the release binary or `go install`.
 
-Use the container image only after verifying that your environment can pull it:
+The container image is intended to be publicly pullable. From a source checkout or release archive, verify anonymous access before using it:
 
 ```bash
-docker pull ghcr.io/devaryakjha/loadwright:latest
+scripts/verify-ghcr-public-pull.sh ghcr.io/devaryakjha/loadwright:latest
 ```
 
 If the pull succeeds, the image is useful for compile/import/report workflows that do not need to start Dockerized JMeter from inside the container. From a source checkout:
@@ -60,6 +60,8 @@ If the pull succeeds, the image is useful for compile/import/report workflows th
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/devaryakjha/loadwright:latest compile examples/api/basic.yaml
 ```
+
+If the verification fails with `unauthorized`, publish again from the public repository release workflow or adjust the package visibility/access settings in GitHub Packages before documenting the container as an install path.
 
 Running load tests from inside the container requires a Docker strategy that will be documented separately.
 

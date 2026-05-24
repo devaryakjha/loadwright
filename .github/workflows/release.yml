@@ -37,3 +37,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify public GHCR pull
+        run: |
+          scripts/verify-ghcr-public-pull.sh "ghcr.io/devaryakjha/loadwright:${GITHUB_REF_NAME#v}"
+          scripts/verify-ghcr-public-pull.sh ghcr.io/devaryakjha/loadwright:latest

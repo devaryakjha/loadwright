@@ -44,6 +44,7 @@ archives:
       - CHANGELOG.md
       - docs/*
       - examples/**/*
+      - scripts/*
 
 checksum:
   name_template: "checksums.txt"

@@ -40,10 +40,10 @@ mkdir -p results
 loadwright run loadwright.yaml --out-dir results/basic-smoke --ci
 ```
 
-For containerized compile/import/report commands, first verify that your environment can pull the Loadwright image:
+For containerized compile/import/report commands, first verify that your environment can anonymously pull the Loadwright image. From a source checkout or release archive:
 
 ```bash
-docker pull ghcr.io/devaryakjha/loadwright:latest
+scripts/verify-ghcr-public-pull.sh ghcr.io/devaryakjha/loadwright:latest
 ```
 
 If the pull succeeds, mount a writable working directory and run as your local user. From a source checkout:
@@ -52,7 +52,14 @@ If the pull succeeds, mount a writable working directory and run as your local u
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/work" ghcr.io/devaryakjha/loadwright:latest compile examples/api/basic.yaml
 ```
 
-If Docker reports `unauthorized`, use the release binary or `go install` path instead.
+If Docker reports `unauthorized`, use the release binary or `go install` path instead. If you intentionally need a private GHCR package, authenticate with a token that has `read:packages` before pulling:
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin
+docker pull ghcr.io/devaryakjha/loadwright:latest
+```
+
+For maintainers, an anonymous `unauthorized` response means the container image is not yet publicly pullable. First confirm a release workflow has published after the repository became public. If a fresh public-repo publish still fails, open the `loadwright` package under the GitHub profile's Packages tab and adjust the package visibility/access settings.
 
 ## WebSocket Examples
 

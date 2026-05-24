@@ -47,7 +47,11 @@ Pushing the tag triggers `.github/workflows/release.yml`, which publishes GitHub
 
 - Confirm the GitHub Release has archives for macOS, Linux, and Windows.
 - Confirm `checksums.txt` exists.
-- Confirm the container image exists in GHCR and is publicly pullable before documenting it as an install path.
+- Confirm the container image exists in GHCR and is publicly pullable:
+  ```bash
+  scripts/verify-ghcr-public-pull.sh ghcr.io/devaryakjha/loadwright:latest
+  ```
+  If this fails with `unauthorized`, first confirm the current release workflow published after the repository became public. If a fresh public-repo publish still fails, open the `loadwright` package under the GitHub profile's Packages tab and adjust the package visibility/access settings.
 - Run a downloaded binary with `loadwright version`.
 - Confirm `summary.json`, `summary.md`, `index.html`, and `junit.xml` are produced by the release smoke test.
 - Create a follow-up issue for anything deferred from the release.

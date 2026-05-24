@@ -4,6 +4,7 @@
 
 - Polish the first-run documentation journey for the `v0.2.0` release.
 - Add next-step guidance after `loadwright init` creates a starter spec.
+- Add anonymous GHCR pull verification for release container images.
 
 ## 0.2.0 - 2026-05-24
 
