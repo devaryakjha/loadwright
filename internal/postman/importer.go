@@ -149,11 +149,12 @@ type RawBodyOptions struct {
 }
 
 type FormParam struct {
-	Key      string `json:"key"`
-	Value    any    `json:"value"`
-	Type     string `json:"type"`
-	Disabled bool   `json:"disabled"`
-	Src      any    `json:"src"`
+	Key         string `json:"key"`
+	Value       any    `json:"value"`
+	Type        string `json:"type"`
+	Disabled    bool   `json:"disabled"`
+	Src         any    `json:"src"`
+	ContentType string `json:"contentType"`
 }
 
 type Auth struct {
@@ -297,17 +298,18 @@ func requestFromPostman(item Item, folders []string, collectionAuth *Auth) (spec
 	}
 
 	return spec.Request{
-		Name:     requestName,
-		Method:   method,
-		Path:     requestPath,
-		Headers:  headers,
-		Query:    query,
-		Body:     body.Legacy,
-		BodyJSON: body.JSON,
-		BodyText: body.Text,
-		BodyForm: body.Form,
-		Auth:     requestAuth,
-		Expect:   spec.Expect{Status: 200},
+		Name:          requestName,
+		Method:        method,
+		Path:          requestPath,
+		Headers:       headers,
+		Query:         query,
+		Body:          body.Legacy,
+		BodyJSON:      body.JSON,
+		BodyText:      body.Text,
+		BodyForm:      body.Form,
+		BodyMultipart: body.Multipart,
+		Auth:          requestAuth,
+		Expect:        spec.Expect{Status: 200},
 	}, target, warnings, true
 }
 
@@ -442,10 +444,11 @@ func headersFromPostman(headers []Header) map[string]string {
 }
 
 type requestBody struct {
-	Legacy any
-	JSON   any
-	Text   string
-	Form   map[string]string
+	Legacy    any
+	JSON      any
+	Text      string
+	Form      map[string]string
+	Multipart []spec.MultipartPart
 }
 
 func bodyFromPostman(body Body, headers map[string]string) (requestBody, []string) {
@@ -476,12 +479,11 @@ func bodyFromPostman(body Body, headers map[string]string) (requestBody, []strin
 		}
 		return requestBody{Form: form}, nil
 	case "formdata":
-		form, warnings := formDataBody(body.FormData)
-		if len(form) == 0 {
+		parts, warnings := formDataBody(body.FormData)
+		if len(parts) == 0 {
 			return requestBody{}, warnings
 		}
-		warnings = append(warnings, "form-data fields imported as a flat object starter body; review multipart encoding before CI use")
-		return requestBody{Legacy: form}, warnings
+		return requestBody{Multipart: parts}, warnings
 	default:
 		return requestBody{}, []string{fmt.Sprintf("request body mode %q is not imported yet", mode)}
 	}
@@ -499,8 +501,8 @@ func formParamsBody(params []FormParam) map[string]string {
 	return out
 }
 
-func formDataBody(params []FormParam) (map[string]any, []string) {
-	out := map[string]any{}
+func formDataBody(params []FormParam) ([]spec.MultipartPart, []string) {
+	var out []spec.MultipartPart
 	var warnings []string
 	for _, param := range params {
 		key := strings.TrimSpace(param.Key)
@@ -508,10 +510,23 @@ func formDataBody(params []FormParam) (map[string]any, []string) {
 			continue
 		}
 		if strings.EqualFold(strings.TrimSpace(param.Type), "file") || hasFormFileSource(param.Src) {
-			warnings = append(warnings, fmt.Sprintf("form-data file field %q was skipped", key))
+			source, multiple := firstFormFileSource(param.Src)
+			if source == "" {
+				warnings = append(warnings, fmt.Sprintf("form-data file field %q has no file source and was skipped", key))
+				continue
+			}
+			if multiple {
+				warnings = append(warnings, fmt.Sprintf("form-data file field %q has multiple file sources; imported the first one", key))
+			}
+			out = append(out, spec.MultipartPart{
+				Name:        key,
+				File:        source,
+				ContentType: strings.TrimSpace(param.ContentType),
+			})
 			continue
 		}
-		out[key] = stringify(param.Value)
+		value := stringify(param.Value)
+		out = append(out, spec.MultipartPart{Name: key, Value: &value})
 	}
 	return out, warnings
 }
@@ -527,6 +542,36 @@ func hasFormFileSource(value any) bool {
 	default:
 		return true
 	}
+}
+
+func firstFormFileSource(value any) (string, bool) {
+	var sources []string
+	switch typed := value.(type) {
+	case nil:
+		return "", false
+	case string:
+		return strings.TrimSpace(typed), false
+	case []any:
+		for _, item := range typed {
+			source := strings.TrimSpace(stringify(item))
+			if source != "" {
+				sources = append(sources, source)
+			}
+		}
+	case []string:
+		for _, item := range typed {
+			source := strings.TrimSpace(item)
+			if source != "" {
+				sources = append(sources, source)
+			}
+		}
+	default:
+		return strings.TrimSpace(stringify(typed)), false
+	}
+	if len(sources) == 0 {
+		return "", false
+	}
+	return sources[0], len(sources) > 1
 }
 
 func shouldParseJSON(raw string, body Body, headers map[string]string) bool {

@@ -75,6 +75,22 @@ requests:
 
 `body_form` compiles to JMeter HTTP arguments with `HTTPSampler.postBodyRaw=false` and adds `Content-Type: application/x-www-form-urlencoded` when no content type header is already set.
 
+Multipart form body:
+
+```yaml
+requests:
+  - method: POST
+    path: /upload
+    body_multipart:
+      - name: title
+        value: avatar
+      - name: avatar
+        file: ./avatar.png
+        content_type: image/png
+```
+
+`body_multipart` compiles to JMeter multipart form-data arguments and file arguments. Text parts use `value`; file parts use `file` plus optional `content_type`. Loadwright lets JMeter set the multipart `Content-Type` boundary.
+
 ## Variables
 
 Variables can be referenced with `{{name}}`.

@@ -316,6 +316,14 @@ requests:
     body_form:
       username: demo
       password: secret
+  - method: POST
+    path: /upload
+    body_multipart:
+      - name: title
+        value: avatar
+      - name: avatar
+        file: ./avatar.png
+        content_type: image/png
 `
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
 		t.Fatal(err)
@@ -333,6 +341,13 @@ requests:
 	if loaded.Requests[2].BodyForm["username"] != "demo" || loaded.Requests[2].BodyForm["password"] != "secret" {
 		t.Fatalf("body_form = %+v", loaded.Requests[2].BodyForm)
 	}
+	if len(loaded.Requests[3].BodyMultipart) != 2 ||
+		loaded.Requests[3].BodyMultipart[0].Value == nil ||
+		*loaded.Requests[3].BodyMultipart[0].Value != "avatar" ||
+		loaded.Requests[3].BodyMultipart[1].File != "./avatar.png" ||
+		loaded.Requests[3].BodyMultipart[1].ContentType != "image/png" {
+		t.Fatalf("body_multipart = %+v", loaded.Requests[3].BodyMultipart)
+	}
 }
 
 func TestRequestRejectsMultipleBodyShapes(t *testing.T) {
@@ -344,6 +359,31 @@ func TestRequestRejectsMultipleBodyShapes(t *testing.T) {
 	}
 	err := raw.NormalizeAndValidate(0)
 	if err == nil || !strings.Contains(err.Error(), "must set only one body field") {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+}
+
+func TestRequestValidatesMultipartBody(t *testing.T) {
+	value := "avatar"
+	raw := Request{
+		Method: "POST",
+		Path:   "/upload",
+		BodyMultipart: []MultipartPart{
+			{Name: "title", Value: &value},
+			{Name: "avatar", File: "avatar.png", ContentType: "image/png"},
+		},
+	}
+	if err := raw.NormalizeAndValidate(0); err != nil {
+		t.Fatalf("NormalizeAndValidate() error = %v", err)
+	}
+
+	invalid := Request{
+		Method:        "POST",
+		Path:          "/upload",
+		BodyMultipart: []MultipartPart{{Name: "avatar"}},
+	}
+	err := invalid.NormalizeAndValidate(0)
+	if err == nil || !strings.Contains(err.Error(), "must set value or file") {
 		t.Fatalf("NormalizeAndValidate() error = %v", err)
 	}
 }
@@ -387,18 +427,25 @@ func TestResolvePreservesJMeterRuntimeVariables(t *testing.T) {
 		Name:   "csv",
 		Target: "https://example.com",
 		Requests: []Request{{
-			Path:     "/login",
-			BodyForm: map[string]string{"username": "${username}", "password": "{{password}}"},
+			Path: "/login",
+			BodyMultipart: []MultipartPart{
+				{Name: "username", Value: stringPtr("${username}")},
+				{Name: "password", Value: stringPtr("{{password}}")},
+				{Name: "avatar", File: "{{avatar_file}}", ContentType: "{{avatar_type}}"},
+			},
 		}},
-		Variables: map[string]string{"password": "secret"},
+		Variables: map[string]string{"password": "secret", "avatar_file": "avatar.png", "avatar_type": "image/png"},
 	}
 	resolved, err := raw.Resolve(nil)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
-	bodyForm := resolved.Requests[0].BodyForm
-	if bodyForm["username"] != "${username}" || bodyForm["password"] != "secret" {
-		t.Fatalf("body_form not resolved correctly: %+v", bodyForm)
+	parts := resolved.Requests[0].BodyMultipart
+	if parts[0].Value == nil || *parts[0].Value != "${username}" ||
+		parts[1].Value == nil || *parts[1].Value != "secret" ||
+		parts[2].File != "avatar.png" ||
+		parts[2].ContentType != "image/png" {
+		t.Fatalf("body_multipart not resolved correctly: %+v", parts)
 	}
 }
 
@@ -739,5 +786,9 @@ func TestWebSocketDelayValidation(t *testing.T) {
 }
 
 func intPtr(value int) *int {
+	return &value
+}
+
+func stringPtr(value string) *string {
 	return &value
 }

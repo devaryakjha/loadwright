@@ -408,14 +408,15 @@ func TestRunImportPostmanCreatesSpecAndWarnings(t *testing.T) {
 	if !strings.Contains(string(data), "target: '{{base_url}}'") ||
 		!strings.Contains(string(data), "name: Create user") ||
 		!strings.Contains(string(data), "name: Ada") ||
-		!strings.Contains(string(data), "title: avatar") ||
+		!strings.Contains(string(data), "body_multipart:") ||
+		!strings.Contains(string(data), "value: avatar") ||
+		!strings.Contains(string(data), "file: /tmp/avatar.png") ||
 		!strings.Contains(string(data), "body_form:") ||
 		!strings.Contains(string(data), "username: demo") {
 		t.Fatalf("unexpected imported spec: %s", data)
 	}
-	if !strings.Contains(stderr.String(), `warning: Upload: form-data file field "avatar" was skipped`) ||
-		!strings.Contains(stderr.String(), "warning: Upload: form-data fields imported as a flat object starter body; review multipart encoding before CI use") {
-		t.Fatalf("expected warning, got stderr=%s", stderr.String())
+	if stderr.String() != "" {
+		t.Fatalf("unexpected warning, got stderr=%s", stderr.String())
 	}
 }
 
@@ -676,6 +677,53 @@ thresholds:
 	}
 	if manifest.StartedAt == "" || manifest.FinishedAt == "" {
 		t.Fatalf("expected timestamps: %+v", manifest)
+	}
+}
+
+func TestRunSpecStagesMultipartFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	if err := os.MkdirAll("specs/fixtures", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("specs/fixtures/avatar.txt", []byte("avatar"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	specYAML := `name: multipart-run
+target: https://example.com
+requests:
+  - name: upload
+    method: POST
+    path: /upload
+    body_multipart:
+      - name: title
+        value: avatar
+      - name: avatar
+        file: fixtures/avatar.txt
+        content_type: text/plain
+`
+	if err := os.WriteFile("specs/spec.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "specs/spec.yaml", "--out-dir", "results/multipart"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	stagedPath := filepath.Join("results", "multipart", "files", "001-avatar.txt")
+	if data, err := os.ReadFile(stagedPath); err != nil || string(data) != "avatar" {
+		t.Fatalf("staged file = %q, %v", data, err)
+	}
+	jmxData, err := os.ReadFile(filepath.Join("results", "multipart", "multipart-run.jmx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(jmxData), `<stringProp name="File.path">files/001-avatar.txt</stringProp>`) {
+		t.Fatalf("JMX did not reference staged multipart file: %s", jmxData)
 	}
 }
 

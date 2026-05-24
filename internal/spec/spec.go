@@ -128,20 +128,28 @@ type DataSet struct {
 }
 
 type Request struct {
-	Name      string            `yaml:"name"`
-	Protocol  string            `yaml:"protocol,omitempty"`
-	Method    string            `yaml:"method"`
-	Path      string            `yaml:"path"`
-	Headers   map[string]string `yaml:"headers,omitempty"`
-	Query     map[string]string `yaml:"query,omitempty"`
-	Body      any               `yaml:"body,omitempty"`
-	BodyJSON  any               `yaml:"body_json,omitempty"`
-	BodyText  string            `yaml:"body_text,omitempty"`
-	BodyForm  map[string]string `yaml:"body_form,omitempty"`
-	Auth      Auth              `yaml:"auth,omitempty"`
-	Timeout   Duration          `yaml:"timeout,omitempty"`
-	Expect    Expect            `yaml:"expect"`
-	WebSocket WebSocket         `yaml:"websocket,omitempty"`
+	Name          string            `yaml:"name"`
+	Protocol      string            `yaml:"protocol,omitempty"`
+	Method        string            `yaml:"method"`
+	Path          string            `yaml:"path"`
+	Headers       map[string]string `yaml:"headers,omitempty"`
+	Query         map[string]string `yaml:"query,omitempty"`
+	Body          any               `yaml:"body,omitempty"`
+	BodyJSON      any               `yaml:"body_json,omitempty"`
+	BodyText      string            `yaml:"body_text,omitempty"`
+	BodyForm      map[string]string `yaml:"body_form,omitempty"`
+	BodyMultipart []MultipartPart   `yaml:"body_multipart,omitempty"`
+	Auth          Auth              `yaml:"auth,omitempty"`
+	Timeout       Duration          `yaml:"timeout,omitempty"`
+	Expect        Expect            `yaml:"expect"`
+	WebSocket     WebSocket         `yaml:"websocket,omitempty"`
+}
+
+type MultipartPart struct {
+	Name        string  `yaml:"name"`
+	Value       *string `yaml:"value,omitempty"`
+	File        string  `yaml:"file,omitempty"`
+	ContentType string  `yaml:"content_type,omitempty"`
 }
 
 type Auth struct {
@@ -354,7 +362,7 @@ func (r *Request) normalizeAndValidateWebSocket(index int) error {
 	if !r.Auth.IsZero() {
 		return fmt.Errorf("requests[%d].auth is not supported for websocket requests", index)
 	}
-	hasHTTPOnlyBody := r.Body != nil || r.BodyJSON != nil || strings.TrimSpace(r.BodyText) != "" || len(r.BodyForm) > 0
+	hasHTTPOnlyBody := r.Body != nil || r.BodyJSON != nil || strings.TrimSpace(r.BodyText) != "" || len(r.BodyForm) > 0 || len(r.BodyMultipart) > 0
 	if len(r.Headers) > 0 || len(r.Query) > 0 || hasHTTPOnlyBody || r.Expect.Status > 0 {
 		return fmt.Errorf("requests[%d] websocket requests only support websocket.* fields plus optional path and timeout", index)
 	}
@@ -442,6 +450,27 @@ func (r *Request) validateBodyFields(index int) error {
 		for key := range r.BodyForm {
 			if strings.TrimSpace(key) == "" {
 				return fmt.Errorf("requests[%d].body_form contains an empty field name", index)
+			}
+		}
+	}
+	if len(r.BodyMultipart) > 0 {
+		fields = append(fields, "body_multipart")
+		for partIndex := range r.BodyMultipart {
+			part := &r.BodyMultipart[partIndex]
+			part.Name = strings.TrimSpace(part.Name)
+			part.File = strings.TrimSpace(part.File)
+			part.ContentType = strings.TrimSpace(part.ContentType)
+			if part.Name == "" {
+				return fmt.Errorf("requests[%d].body_multipart[%d].name is required", index, partIndex)
+			}
+			if part.Value == nil && part.File == "" {
+				return fmt.Errorf("requests[%d].body_multipart[%d] must set value or file", index, partIndex)
+			}
+			if part.Value != nil && part.File != "" {
+				return fmt.Errorf("requests[%d].body_multipart[%d] must set only one of value or file", index, partIndex)
+			}
+			if part.Value != nil && part.ContentType != "" {
+				return fmt.Errorf("requests[%d].body_multipart[%d].content_type is only supported for file parts", index, partIndex)
 			}
 		}
 	}
@@ -603,6 +632,10 @@ func renderRequest(request Request, vars map[string]string, index int) (Request,
 	if err != nil {
 		return Request{}, fmt.Errorf("requests[%d].body_form: %w", index, err)
 	}
+	out.BodyMultipart, err = renderMultipartParts(request.BodyMultipart, vars)
+	if err != nil {
+		return Request{}, fmt.Errorf("requests[%d].body_multipart: %w", index, err)
+	}
 	out.Auth, err = renderAuth(request.Auth, vars, fmt.Sprintf("requests[%d].auth", index))
 	if err != nil {
 		return Request{}, err
@@ -610,6 +643,35 @@ func renderRequest(request Request, vars map[string]string, index int) (Request,
 	out.WebSocket, err = renderWebSocket(request.WebSocket, vars, index)
 	if err != nil {
 		return Request{}, err
+	}
+	return out, nil
+}
+
+func renderMultipartParts(parts []MultipartPart, vars map[string]string) ([]MultipartPart, error) {
+	if len(parts) == 0 {
+		return nil, nil
+	}
+	out := make([]MultipartPart, len(parts))
+	for index, part := range parts {
+		rendered := part
+		var err error
+		if rendered.Name, err = renderString(part.Name, vars); err != nil {
+			return nil, fmt.Errorf("[%d].name: %w", index, err)
+		}
+		if part.Value != nil {
+			value, err := renderString(*part.Value, vars)
+			if err != nil {
+				return nil, fmt.Errorf("[%d].value: %w", index, err)
+			}
+			rendered.Value = &value
+		}
+		if rendered.File, err = renderString(part.File, vars); err != nil {
+			return nil, fmt.Errorf("[%d].file: %w", index, err)
+		}
+		if rendered.ContentType, err = renderString(part.ContentType, vars); err != nil {
+			return nil, fmt.Errorf("[%d].content_type: %w", index, err)
+		}
+		out[index] = rendered
 	}
 	return out, nil
 }

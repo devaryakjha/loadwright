@@ -112,6 +112,34 @@ func TestImportFormParamsAsFormBody(t *testing.T) {
 	}
 }
 
+func TestImportMultipartParamsAsMultipartBody(t *testing.T) {
+	result, err := Import(Archive{Log: Log{Entries: []Entry{{Request: Request{
+		Method: "POST",
+		URL:    "https://api.example.com/upload",
+		PostData: &PostData{
+			MimeType: "multipart/form-data; boundary=----loadwright",
+			Params: []PostParam{
+				{Name: "title", Value: "avatar"},
+				{Name: "avatar", FileName: "fixtures/avatar.png", ContentType: "image/png"},
+			},
+		},
+	}}}}}, Options{Name: "Multipart"})
+	if err != nil {
+		t.Fatalf("Import() error = %v", err)
+	}
+	parts := result.Spec.Requests[0].BodyMultipart
+	if len(parts) != 1 ||
+		parts[0].Name != "title" ||
+		parts[0].Value == nil ||
+		*parts[0].Value != "avatar" {
+		t.Fatalf("body_multipart = %+v", parts)
+	}
+	if len(result.Warnings) != 1 ||
+		!strings.Contains(result.Warnings[0], `POST /upload form-data file field "avatar" was skipped`) {
+		t.Fatalf("warnings = %+v", result.Warnings)
+	}
+}
+
 func TestImportRejectsNoSupportedRequests(t *testing.T) {
 	_, err := Import(Archive{Log: Log{Entries: []Entry{{Request: Request{
 		Method: "TRACE",

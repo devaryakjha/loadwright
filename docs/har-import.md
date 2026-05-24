@@ -19,8 +19,9 @@ bin/loadwright import har capture.har --base-url https://staging.example.com -o 
 - The HAR filename becomes the spec name.
 - The first request origin becomes `target` unless `--base-url` is provided.
 - Supported requests become Loadwright HTTP requests.
-- Method, path, query params, headers, and JSON/text request bodies are imported.
+- Method, path, query params, headers, JSON/text request bodies, and multipart form-data params are imported.
 - Form params are imported as runnable `body_form` specs.
+- Text multipart params are imported as runnable `body_multipart` specs.
 - Unsupported or lossy capture details are reported as warnings.
 
 ## Current Limitations
@@ -28,7 +29,7 @@ bin/loadwright import har capture.har --base-url https://staging.example.com -o 
 - HAR 1.2 JSON only.
 - Browser replay semantics are not reproduced.
 - Cookies are not imported.
-- File uploads and encoded/binary request bodies are skipped with warnings.
-- Multipart form-data is not rendered as multipart JMeter requests yet.
+- File uploads are skipped with warnings because HAR captures do not include runnable local file sources.
+- Encoded/binary request bodies are skipped with warnings.
 - Multiple target hosts are imported into a single Loadwright target; review warnings before using the generated spec in CI.
 - Imported specs are starter specs and should be reviewed before CI use.

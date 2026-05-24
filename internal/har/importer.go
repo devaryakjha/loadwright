@@ -166,16 +166,17 @@ func requestFromHAR(index int, harRequest Request) (spec.Request, string, []stri
 	warnings = append(warnings, bodyWarnings...)
 
 	return spec.Request{
-		Name:     name,
-		Method:   method,
-		Path:     requestPath,
-		Headers:  headers,
-		Query:    query,
-		Body:     body.Legacy,
-		BodyJSON: body.JSON,
-		BodyText: body.Text,
-		BodyForm: body.Form,
-		Expect:   spec.Expect{Status: 200},
+		Name:          name,
+		Method:        method,
+		Path:          requestPath,
+		Headers:       headers,
+		Query:         query,
+		Body:          body.Legacy,
+		BodyJSON:      body.JSON,
+		BodyText:      body.Text,
+		BodyForm:      body.Form,
+		BodyMultipart: body.Multipart,
+		Expect:        spec.Expect{Status: 200},
 	}, target, warnings, true
 }
 
@@ -227,10 +228,11 @@ func headersFromHAR(requestName string, headers []NameValue) (map[string]string,
 }
 
 type requestBody struct {
-	Legacy any
-	JSON   any
-	Text   string
-	Form   map[string]string
+	Legacy    any
+	JSON      any
+	Text      string
+	Form      map[string]string
+	Multipart []spec.MultipartPart
 }
 
 func bodyFromHAR(requestName string, postData *PostData, headers map[string]string) (requestBody, []string) {
@@ -241,10 +243,12 @@ func bodyFromHAR(requestName string, postData *PostData, headers map[string]stri
 		return requestBody{}, []string{fmt.Sprintf("%s request body uses %s encoding and was skipped", requestName, postData.Encoding)}
 	}
 	if len(postData.Params) > 0 {
-		for _, param := range postData.Params {
-			if strings.TrimSpace(param.FileName) != "" {
-				return requestBody{}, []string{fmt.Sprintf("%s has file upload form data; body was skipped", requestName)}
+		if isMultipartMime(postData.MimeType) || hasFileParam(postData.Params) {
+			parts, warnings := multipartParamsBody(requestName, postData.Params)
+			if len(parts) == 0 {
+				return requestBody{}, warnings
 			}
+			return requestBody{Multipart: parts}, warnings
 		}
 		return requestBody{Form: paramsBody(postData.Params)}, nil
 	}
@@ -263,6 +267,37 @@ func bodyFromHAR(requestName string, postData *PostData, headers map[string]stri
 		return requestBody{Text: text}, []string{fmt.Sprintf("%s body looked like JSON but could not be parsed; imported as string", requestName)}
 	}
 	return requestBody{Text: text}, nil
+}
+
+func multipartParamsBody(requestName string, params []PostParam) ([]spec.MultipartPart, []string) {
+	out := make([]spec.MultipartPart, 0, len(params))
+	var warnings []string
+	for _, param := range params {
+		name := strings.TrimSpace(param.Name)
+		if name == "" {
+			continue
+		}
+		if fileName := strings.TrimSpace(param.FileName); fileName != "" {
+			warnings = append(warnings, fmt.Sprintf("%s form-data file field %q was skipped because HAR does not include a runnable local file source", requestName, name))
+			continue
+		}
+		value := stringify(param.Value)
+		out = append(out, spec.MultipartPart{Name: name, Value: &value})
+	}
+	return out, warnings
+}
+
+func hasFileParam(params []PostParam) bool {
+	for _, param := range params {
+		if strings.TrimSpace(param.FileName) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func isMultipartMime(value string) bool {
+	return strings.Contains(strings.ToLower(value), "multipart/form-data")
 }
 
 func paramsBody(params []PostParam) map[string]string {

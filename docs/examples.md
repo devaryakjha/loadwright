@@ -34,6 +34,14 @@ bin/loadwright run examples/api/form-urlencoded.yaml --ci
 
 Demonstrates `application/x-www-form-urlencoded` request bodies with `body_form`.
 
+## Multipart Upload
+
+```bash
+bin/loadwright run examples/api/multipart-upload.yaml --ci
+```
+
+Demonstrates multipart form-data uploads with `body_multipart`.
+
 ## Checkout Flow
 
 ```bash

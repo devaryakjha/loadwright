@@ -213,6 +213,10 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 			return 1
 		}
 		thresholds = loaded.Thresholds
+		if err := stageMultipartFiles(loaded, filepath.Dir(input), outputDir); err != nil {
+			fmt.Fprintf(stderr, "stage multipart files failed: %v\n", err)
+			return 1
+		}
 		jmxPath = filepath.Join(outputDir, jmx.SafeName(loaded.Name)+".jmx")
 		if err := jmx.Compile(loaded, jmxPath); err != nil {
 			fmt.Fprintf(stderr, "compile failed: %v\n", err)
@@ -534,6 +538,53 @@ func loadResolvedSpec(path string, envFile string) (*spec.Spec, error) {
 		return nil, err
 	}
 	return loaded.Resolve(env, spec.WithBaseDir(filepath.Dir(path)))
+}
+
+func stageMultipartFiles(loaded *spec.Spec, specDir string, outputDir string) error {
+	next := 1
+	for requestIndex := range loaded.Requests {
+		for partIndex := range loaded.Requests[requestIndex].BodyMultipart {
+			part := &loaded.Requests[requestIndex].BodyMultipart[partIndex]
+			if part.File == "" || strings.Contains(part.File, "${") {
+				continue
+			}
+			source := part.File
+			if !filepath.IsAbs(source) {
+				source = filepath.Join(specDir, source)
+			}
+			sourceFile, err := os.Open(source)
+			if err != nil {
+				return fmt.Errorf("requests[%d].body_multipart[%d].file: %w", requestIndex, partIndex, err)
+			}
+			stageDir := filepath.Join(outputDir, "files")
+			if err := os.MkdirAll(stageDir, 0o755); err != nil {
+				_ = sourceFile.Close()
+				return err
+			}
+			name := fmt.Sprintf("%03d-%s", next, filepath.Base(source))
+			next++
+			target := filepath.Join(stageDir, name)
+			targetFile, err := os.Create(target)
+			if err != nil {
+				_ = sourceFile.Close()
+				return err
+			}
+			_, copyErr := io.Copy(targetFile, sourceFile)
+			closeTargetErr := targetFile.Close()
+			closeSourceErr := sourceFile.Close()
+			if copyErr != nil {
+				return copyErr
+			}
+			if closeTargetErr != nil {
+				return closeTargetErr
+			}
+			if closeSourceErr != nil {
+				return closeSourceErr
+			}
+			part.File = filepath.ToSlash(filepath.Join("files", name))
+		}
+	}
+	return nil
 }
 
 func writeSpecError(w io.Writer, err error) {

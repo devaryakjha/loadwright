@@ -1,0 +1,21 @@
+name: multipart-upload-example
+target: https://httpbin.org
+load:
+  users: 2
+  ramp_up: 5s
+  loops: 2
+requests:
+  - name: upload csv
+    method: POST
+    path: /post
+    body_multipart:
+      - name: title
+        value: users
+      - name: users
+        file: users.csv
+        content_type: text/csv
+    expect:
+      status: 200
+thresholds:
+  error_rate_lt: 1
+  p95_ms_lt: 3000

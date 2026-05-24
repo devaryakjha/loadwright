@@ -1,13 +1,13 @@
 # Limitations
 
-Loadwright `v0.1.0` is intentionally focused on HTTP and WebSocket API load-test workflows.
+Loadwright is intentionally focused on HTTP and WebSocket API load-test workflows.
 
 ## In Scope
 
 - YAML specs for HTTP API requests.
 - GET, POST, PUT, PATCH, DELETE, HEAD, and OPTIONS requests.
 - Query params, headers, JSON/string bodies, expected HTTP status assertions.
-- Urlencoded form bodies.
+- Urlencoded and multipart form bodies.
 - Basic and bearer auth helpers.
 - Environment files and simple variable substitution.
 - CSV data sources.
@@ -25,7 +25,6 @@ Loadwright `v0.1.0` is intentionally focused on HTTP and WebSocket API load-test
 - Distributed load generation across multiple workers.
 - Historical trend storage.
 - Browser-level performance testing.
-- Multipart form-data request rendering.
 - AI-assisted spec generation or result explanation.
 
 ## Compatibility Boundary

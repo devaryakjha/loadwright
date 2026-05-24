@@ -142,7 +142,7 @@ func TestImportURLEncodedBodyAsFormBody(t *testing.T) {
 	}
 }
 
-func TestImportFormDataBodySkipsFileFields(t *testing.T) {
+func TestImportFormDataBodyAsMultipart(t *testing.T) {
 	result, err := Import(Collection{
 		Info: Info{Name: "Multipart"},
 		Items: []Item{{
@@ -155,7 +155,7 @@ func TestImportFormDataBodySkipsFileFields(t *testing.T) {
 					Mode: "formdata",
 					FormData: []FormParam{
 						{Key: "title", Value: "avatar"},
-						{Key: "avatar", Type: "file", Src: "/tmp/avatar.png"},
+						{Key: "avatar", Type: "file", Src: "/tmp/avatar.png", ContentType: "image/png"},
 					},
 				},
 			},
@@ -164,21 +164,18 @@ func TestImportFormDataBodySkipsFileFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Import() error = %v", err)
 	}
-	body := result.Spec.Requests[0].Body.(map[string]any)
-	if body["title"] != "avatar" {
-		t.Fatalf("body = %+v", body)
+	parts := result.Spec.Requests[0].BodyMultipart
+	if len(parts) != 2 ||
+		parts[0].Name != "title" ||
+		parts[0].Value == nil ||
+		*parts[0].Value != "avatar" ||
+		parts[1].Name != "avatar" ||
+		parts[1].File != "/tmp/avatar.png" ||
+		parts[1].ContentType != "image/png" {
+		t.Fatalf("body_multipart = %+v", parts)
 	}
-	if _, exists := body["avatar"]; exists {
-		t.Fatalf("file field imported: %+v", body)
-	}
-	joined := strings.Join(result.Warnings, "\n")
-	for _, expected := range []string{
-		`Upload: form-data file field "avatar" was skipped`,
-		"Upload: form-data fields imported as a flat object starter body; review multipart encoding before CI use",
-	} {
-		if !strings.Contains(joined, expected) {
-			t.Fatalf("missing warning %q in %+v", expected, result.Warnings)
-		}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("warnings = %+v", result.Warnings)
 	}
 }
 

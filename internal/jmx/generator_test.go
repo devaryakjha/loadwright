@@ -160,6 +160,45 @@ func TestRenderFormBodyArguments(t *testing.T) {
 	}
 }
 
+func TestRenderMultipartBodyArguments(t *testing.T) {
+	loops := 1
+	title := "avatar"
+	loaded := &spec.Spec{
+		Name:   "multipart body",
+		Target: "https://api.example.com",
+		Load:   spec.Load{Users: 1, RampUp: spec.Duration{Seconds: 1, Set: true}, Loops: &loops},
+		Requests: []spec.Request{{
+			Name:    "upload",
+			Method:  "POST",
+			Path:    "/upload",
+			Headers: map[string]string{"Content-Type": "multipart/form-data", "X-Trace": "yes"},
+			BodyMultipart: []spec.MultipartPart{
+				{Name: "title", Value: &title},
+				{Name: "avatar", File: "fixtures/avatar.png", ContentType: "image/png"},
+			},
+		}},
+	}
+	rendered := Render(loaded)
+	for _, expected := range []string{
+		`<boolProp name="HTTPSampler.postBodyRaw">false</boolProp>`,
+		`<boolProp name="HTTPSampler.DO_MULTIPART_POST">true</boolProp>`,
+		`<elementProp name="title" elementType="HTTPArgument">`,
+		`<stringProp name="Argument.value">avatar</stringProp>`,
+		`<elementProp name="HTTPsampler.Files" elementType="HTTPFileArgs">`,
+		`<stringProp name="File.path">fixtures/avatar.png</stringProp>`,
+		`<stringProp name="File.paramname">avatar</stringProp>`,
+		`<stringProp name="File.mimetype">image/png</stringProp>`,
+		`<stringProp name="Header.name">X-Trace</stringProp>`,
+	} {
+		if !strings.Contains(rendered, expected) {
+			t.Fatalf("multipart JMX missing %q\n%s", expected, rendered)
+		}
+	}
+	if strings.Contains(rendered, `<stringProp name="Header.name">Content-Type</stringProp>`) {
+		t.Fatalf("multipart JMX should let JMeter set Content-Type boundary\n%s", rendered)
+	}
+}
+
 func TestRenderDurationBasedLoad(t *testing.T) {
 	loaded := &spec.Spec{
 		Name:   "duration load",

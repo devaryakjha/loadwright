@@ -118,6 +118,7 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 	target, _ := url.Parse(s.Target)
 	fmt.Fprintf(b, `        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="%s" enabled="true">`+"\n", esc(r.Name))
 	body := rawBodyString(r)
+	multipart := len(r.BodyMultipart) > 0
 	if body != "" {
 		b.WriteString("          <boolProp name=\"HTTPSampler.postBodyRaw\">true</boolProp>\n")
 	} else {
@@ -131,6 +132,8 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 		fmt.Fprintf(b, "                <stringProp name=\"Argument.value\">%s</stringProp>\n", esc(body))
 		b.WriteString("                <stringProp name=\"Argument.metadata\">=</stringProp>\n")
 		b.WriteString("              </elementProp>\n")
+	} else if multipart {
+		writeMultipartTextArguments(b, r.BodyMultipart)
 	} else if len(r.BodyForm) > 0 {
 		writeFormArguments(b, r.BodyForm)
 	} else {
@@ -138,6 +141,9 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 	}
 	b.WriteString("            </collectionProp>\n")
 	b.WriteString("          </elementProp>\n")
+	if multipart {
+		writeMultipartFileArguments(b, r.BodyMultipart)
+	}
 	fmt.Fprintf(b, "          <stringProp name=\"HTTPSampler.domain\">%s</stringProp>\n", esc(target.Hostname()))
 	fmt.Fprintf(b, "          <stringProp name=\"HTTPSampler.port\">%s</stringProp>\n", esc(target.Port()))
 	fmt.Fprintf(b, "          <stringProp name=\"HTTPSampler.protocol\">%s</stringProp>\n", esc(target.Scheme))
@@ -147,7 +153,7 @@ func writeHTTPSampler(b *strings.Builder, s *spec.Spec, r spec.Request) {
 	b.WriteString("          <boolProp name=\"HTTPSampler.follow_redirects\">true</boolProp>\n")
 	b.WriteString("          <boolProp name=\"HTTPSampler.auto_redirects\">false</boolProp>\n")
 	b.WriteString("          <boolProp name=\"HTTPSampler.use_keepalive\">true</boolProp>\n")
-	b.WriteString("          <boolProp name=\"HTTPSampler.DO_MULTIPART_POST\">false</boolProp>\n")
+	fmt.Fprintf(b, "          <boolProp name=\"HTTPSampler.DO_MULTIPART_POST\">%s</boolProp>\n", boolLiteral(multipart))
 	b.WriteString("          <stringProp name=\"HTTPSampler.embedded_url_re\"></stringProp>\n")
 	timeoutMS := ""
 	if r.Timeout.Set {
@@ -412,6 +418,38 @@ func writeFormArguments(b *strings.Builder, fields map[string]string) {
 	}
 }
 
+func writeMultipartTextArguments(b *strings.Builder, parts []spec.MultipartPart) {
+	for _, part := range parts {
+		if part.Value == nil {
+			continue
+		}
+		fmt.Fprintf(b, "              <elementProp name=\"%s\" elementType=\"HTTPArgument\">\n", esc(part.Name))
+		b.WriteString("                <boolProp name=\"HTTPArgument.always_encode\">false</boolProp>\n")
+		fmt.Fprintf(b, "                <stringProp name=\"Argument.name\">%s</stringProp>\n", esc(part.Name))
+		fmt.Fprintf(b, "                <stringProp name=\"Argument.value\">%s</stringProp>\n", esc(*part.Value))
+		b.WriteString("                <stringProp name=\"Argument.metadata\">=</stringProp>\n")
+		b.WriteString("                <boolProp name=\"HTTPArgument.use_equals\">true</boolProp>\n")
+		b.WriteString("              </elementProp>\n")
+	}
+}
+
+func writeMultipartFileArguments(b *strings.Builder, parts []spec.MultipartPart) {
+	b.WriteString("          <elementProp name=\"HTTPsampler.Files\" elementType=\"HTTPFileArgs\">\n")
+	b.WriteString("            <collectionProp name=\"HTTPFileArgs.files\">\n")
+	for _, part := range parts {
+		if part.File == "" {
+			continue
+		}
+		fmt.Fprintf(b, "              <elementProp name=\"%s\" elementType=\"HTTPFileArg\">\n", esc(part.Name))
+		fmt.Fprintf(b, "                <stringProp name=\"File.path\">%s</stringProp>\n", esc(part.File))
+		fmt.Fprintf(b, "                <stringProp name=\"File.paramname\">%s</stringProp>\n", esc(part.Name))
+		fmt.Fprintf(b, "                <stringProp name=\"File.mimetype\">%s</stringProp>\n", esc(part.ContentType))
+		b.WriteString("              </elementProp>\n")
+	}
+	b.WriteString("            </collectionProp>\n")
+	b.WriteString("          </elementProp>\n")
+}
+
 func writeHeaders(b *strings.Builder, headers map[string]string) {
 	b.WriteString("          <HeaderManager guiclass=\"HeaderPanel\" testclass=\"HeaderManager\" testname=\"HTTP Headers\" enabled=\"true\">\n")
 	b.WriteString("            <collectionProp name=\"HeaderManager.headers\">\n")
@@ -489,6 +527,16 @@ func jsonable(value any) any {
 }
 
 func requestHeaders(r spec.Request) map[string]string {
+	if len(r.BodyMultipart) > 0 {
+		headers := map[string]string{}
+		for key, value := range r.Headers {
+			if strings.EqualFold(key, "content-type") {
+				continue
+			}
+			headers[key] = value
+		}
+		return headers
+	}
 	if len(r.BodyForm) == 0 || hasHeader(r.Headers, "content-type") {
 		return r.Headers
 	}
@@ -498,6 +546,13 @@ func requestHeaders(r spec.Request) map[string]string {
 	}
 	headers["Content-Type"] = "application/x-www-form-urlencoded"
 	return headers
+}
+
+func boolLiteral(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
 }
 
 func hasHeader(headers map[string]string, name string) bool {
