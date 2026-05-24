@@ -37,8 +37,8 @@ bin/loadwright report results/release-smoke/results.jtl --out-dir results/releas
 ## Tagging
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag vX.Y.Z
+git push origin vX.Y.Z
 ```
 
 Pushing the tag triggers `.github/workflows/release.yml`, which publishes GitHub release artifacts and GHCR images.
