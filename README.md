@@ -48,7 +48,7 @@ From a source checkout:
 go build -o bin/loadwright ./cmd/loadwright
 ```
 
-Docker is required for `loadwright run` and `loadwright doctor --deep`. It is not required for `init`, `validate`, `compile`, `import`, or `report`.
+Docker is required for `loadwright run`, `loadwright setup websocket`, and `loadwright doctor --deep`. It is not required for `init`, `validate`, `compile`, `import`, or `report`.
 
 ## Quickstart
 
@@ -134,7 +134,8 @@ More docs:
 ## Commands
 
 ```bash
-loadwright doctor [--deep] [--image IMAGE]
+loadwright doctor [--deep] [--websocket] [--image IMAGE]
+loadwright setup websocket [--image IMAGE] [--dockerfile docker/jmeter/Dockerfile]
 loadwright version
 loadwright init [path]
 loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
@@ -149,14 +150,15 @@ loadwright compare <baseline-summary.json> <candidate-summary.json> [-o comparis
 
 `doctor --deep` runs the configured JMeter Docker image and verifies that JMeter starts.
 
-For WebSocket specs, build the bundled plugin image first, then pass it with `--image`:
+For WebSocket specs, build the bundled plugin image once, verify it, then run the YAML spec normally:
 
 ```bash
-docker build -t loadwright/jmeter-websocket:5.5 -f docker/jmeter/Dockerfile .
-bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:5.5
+bin/loadwright setup websocket
+bin/loadwright doctor --deep --websocket
+bin/loadwright run examples/api/websocket-multi.yaml --ci
 ```
 
-The `docker/jmeter/Dockerfile` extends the pinned HTTP runtime image, `justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7`, and adds the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin.
+The `docker/jmeter/Dockerfile` extends the pinned HTTP runtime image, `justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7`, and adds the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin pinned in `docker/jmeter/websocket-plugin.lock`. WebSocket YAML specs use `loadwright/jmeter-websocket:5.5` automatically unless you pass `--image`.
 
 ## Roadmap
 
@@ -164,7 +166,7 @@ See [ROADMAP.md](ROADMAP.md). The short version:
 
 - make the deterministic Go CLI excellent first
 - add broader import support next
-- add WebSocket/plugin automation
+- publish and distribute richer runtime images
 - add optional AI later for generating, explaining, and improving specs
 
 ## Development

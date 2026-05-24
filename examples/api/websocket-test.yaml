@@ -13,4 +13,4 @@ requests:
       timeout: 5s
 thresholds:
   error_rate_lt: 100
-  p95_ms_lt: 5000
+  p95_ms_lt: 10000

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -56,5 +57,30 @@ func TestCheckWritableDir(t *testing.T) {
 	check := checkWritableDir(dir, "nested")
 	if !check.Passed || !strings.Contains(check.Message, "writable") {
 		t.Fatalf("unexpected check: %+v", check)
+	}
+}
+
+func TestWebSocketDockerfileEnforcesLockedChecksum(t *testing.T) {
+	lockData, err := os.ReadFile(filepath.Join("..", "..", "docker", "jmeter", "websocket-plugin.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dockerfileData, err := os.ReadFile(filepath.Join("..", "..", "docker", "jmeter", "Dockerfile"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var checksum string
+	for _, line := range strings.Split(string(lockData), "\n") {
+		if strings.HasPrefix(line, "sha256=") {
+			checksum = strings.TrimPrefix(line, "sha256=")
+			break
+		}
+	}
+	if checksum == "" {
+		t.Fatalf("websocket-plugin.lock missing sha256")
+	}
+	if !strings.Contains(string(dockerfileData), "WS_PLUGIN_SHA256="+checksum) ||
+		!strings.Contains(string(dockerfileData), "ADD --checksum=sha256:${WS_PLUGIN_SHA256}") {
+		t.Fatalf("Dockerfile does not enforce locked WebSocket plugin checksum")
 	}
 }

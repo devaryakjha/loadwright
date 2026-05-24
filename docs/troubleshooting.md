@@ -63,15 +63,15 @@ For maintainers, an anonymous `unauthorized` response means the container image 
 
 ## WebSocket Examples
 
-WebSocket specs currently require the bundled plugin-enabled JMeter image.
+WebSocket specs require the bundled plugin-enabled JMeter image. From a source checkout or release archive, build it once and verify the plugin before running examples:
 
 ```bash
-docker build -t loadwright/jmeter-websocket:5.5 -f docker/jmeter/Dockerfile .
-loadwright doctor --deep --image loadwright/jmeter-websocket:5.5
-loadwright run examples/api/websocket-echo.yaml --ci --image loadwright/jmeter-websocket:5.5
+loadwright setup websocket
+loadwright doctor --deep --websocket
+loadwright run examples/api/websocket-echo.yaml --ci
 ```
 
-HTTP examples do not require this WebSocket image.
+If a run fails with `CannotResolveClassException` for `eu.luminis.jmeter.wssampler`, rerun the setup and doctor commands above. HTTP examples do not require this WebSocket image.
 
 ## Validate Before Running
 

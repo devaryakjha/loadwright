@@ -2,7 +2,7 @@
 
 The `examples/` directory contains runnable specs for common scenarios.
 
-Run `loadwright doctor --deep` once before running HTTP examples for the first time. WebSocket examples need the plugin-enabled image shown in the WebSocket section.
+Run `loadwright doctor --deep` once before running HTTP examples for the first time. For WebSocket examples, run `bin/loadwright setup websocket` once and verify with `bin/loadwright doctor --deep --websocket`.
 
 ## Basic API
 
@@ -102,11 +102,12 @@ Demonstrates default and request-specific timeouts.
 
 ## WebSocket Echo
 
-WebSocket specs require a plugin-enabled JMeter image. Build it once from the bundled Dockerfile (extends `justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7` with the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin), then reuse it for all WebSocket examples:
+WebSocket specs require a plugin-enabled JMeter image. Build it once from the bundled Dockerfile (extends `justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7` with the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin pinned in `docker/jmeter/websocket-plugin.lock`), then reuse it for all WebSocket examples:
 
 ```bash
-docker build -t loadwright/jmeter-websocket:5.5 -f docker/jmeter/Dockerfile .
-bin/loadwright run examples/api/websocket-echo.yaml --ci --image loadwright/jmeter-websocket:5.5
+bin/loadwright setup websocket
+bin/loadwright doctor --deep --websocket
+bin/loadwright run examples/api/websocket-echo.yaml --ci
 ```
 
 Demonstrates a WebSocket request that sends one message and checks the first response.
@@ -114,8 +115,7 @@ Demonstrates a WebSocket request that sends one message and checks the first res
 ## WebSocket Multi-Message
 
 ```bash
-docker build -t loadwright/jmeter-websocket:5.5 -f docker/jmeter/Dockerfile .  # skip if already built
-bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:5.5
+bin/loadwright run examples/api/websocket-multi.yaml --ci
 ```
 
 Demonstrates a multi-message WebSocket sequence with delays and per-message assertions.
@@ -123,8 +123,7 @@ Demonstrates a multi-message WebSocket sequence with delays and per-message asse
 ## WebSocket Subprotocol
 
 ```bash
-docker build -t loadwright/jmeter-websocket:5.5 -f docker/jmeter/Dockerfile .  # skip if already built
-bin/loadwright run examples/api/websocket-subprotocol.yaml --ci --image loadwright/jmeter-websocket:5.5
+bin/loadwright run examples/api/websocket-subprotocol.yaml --ci
 ```
 
 Demonstrates WebSocket subprotocol negotiation and custom handshake headers.

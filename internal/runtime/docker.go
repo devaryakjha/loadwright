@@ -13,7 +13,12 @@ import (
 	"strings"
 )
 
-const DefaultJMeterImage = "justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7"
+const (
+	DefaultJMeterImage          = "justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7"
+	DefaultWebSocketJMeterImage = "loadwright/jmeter-websocket:5.5"
+	WebSocketDockerfile         = "docker/jmeter/Dockerfile"
+	WebSocketPluginJar          = "/opt/apache-jmeter-5.5/lib/ext/jmeter-websocket-samplers-1.3.2.jar"
+)
 
 type ErrorKind string
 
@@ -62,14 +67,27 @@ type RunOptions struct {
 }
 
 type DoctorOptions struct {
-	Image   string
-	Deep    bool
-	WorkDir string
+	Image     string
+	Deep      bool
+	WorkDir   string
+	WebSocket bool
+}
+
+type WebSocketSetupOptions struct {
+	Image      string
+	Dockerfile string
+	ContextDir string
+	Stdout     io.Writer
+	Stderr     io.Writer
 }
 
 func Doctor(options DoctorOptions) []Check {
 	if options.Image == "" {
-		options.Image = DefaultJMeterImage
+		if options.WebSocket {
+			options.Image = DefaultWebSocketJMeterImage
+		} else {
+			options.Image = DefaultJMeterImage
+		}
 	}
 	if options.WorkDir == "" {
 		options.WorkDir = "."
@@ -83,6 +101,9 @@ func Doctor(options DoctorOptions) []Check {
 	}
 	if options.Deep {
 		checks = append(checks, checkJMeterRuntime(options.Image))
+		if options.WebSocket {
+			checks = append(checks, checkWebSocketPlugin(options.Image))
+		}
 	}
 	return checks
 }
@@ -156,6 +177,37 @@ func RunJMeter(options RunOptions) error {
 	return nil
 }
 
+func SetupWebSocketRuntime(options WebSocketSetupOptions) error {
+	if options.Image == "" {
+		options.Image = DefaultWebSocketJMeterImage
+	}
+	if options.Dockerfile == "" {
+		options.Dockerfile = WebSocketDockerfile
+	}
+	if options.ContextDir == "" {
+		options.ContextDir = "."
+	}
+	if err := requireDockerDaemon(options.Image); err != nil {
+		return err
+	}
+	args := []string{"build", "-t", options.Image, "-f", options.Dockerfile, options.ContextDir}
+	cmd := exec.Command("docker", args...)
+	if options.Stdout != nil {
+		cmd.Stdout = options.Stdout
+	} else {
+		cmd.Stdout = os.Stdout
+	}
+	if options.Stderr != nil {
+		cmd.Stderr = options.Stderr
+	} else {
+		cmd.Stderr = os.Stderr
+	}
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("docker build websocket runtime image %s: %w", options.Image, err)
+	}
+	return nil
+}
+
 func checkCommand(command string, name string) Check {
 	if _, err := exec.LookPath(command); err != nil {
 		return Check{Name: name, Passed: false, Message: fmt.Sprintf("%s not found in PATH", command)}
@@ -194,6 +246,13 @@ func checkImage(image string) Check {
 	cmd := exec.Command("docker", "image", "inspect", image, "--format", "{{.Architecture}}")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if image == DefaultWebSocketJMeterImage {
+			message := fmt.Sprintf("could not find %s locally. Run `loadwright setup websocket`, then retry `loadwright doctor --deep --websocket`.", image)
+			if detail := strings.TrimSpace(string(output)); detail != "" {
+				message += " Docker said: " + oneLine(detail)
+			}
+			return Check{Name: "JMeter image", Passed: false, Message: message}
+		}
 		pull := exec.Command("docker", "pull", image)
 		pullOutput, pullErr := pull.CombinedOutput()
 		if pullErr != nil {
@@ -229,6 +288,19 @@ func checkJMeterRuntime(image string) Check {
 	return Check{Name: "JMeter runtime", Passed: true, Message: version}
 }
 
+func checkWebSocketPlugin(image string) Check {
+	cmd := exec.Command("docker", "run", "--rm", "--entrypoint", "sh", image, "-c", "test -f "+shellQuote(WebSocketPluginJar))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		message := fmt.Sprintf("%s does not include the WebSocket Samplers plugin. Run `loadwright setup websocket`, then retry `loadwright doctor --deep --websocket`.", image)
+		if detail := strings.TrimSpace(string(output)); detail != "" {
+			message += " Docker said: " + oneLine(detail)
+		}
+		return Check{Name: "WebSocket plugin", Passed: false, Message: message}
+	}
+	return Check{Name: "WebSocket plugin", Passed: true, Message: WebSocketPluginJar + " found"}
+}
+
 func requireDockerDaemon(image string) error {
 	cmd := exec.Command("docker", "version", "--format", "{{.Server.Version}}")
 	output, err := cmd.CombinedOutput()
@@ -246,8 +318,18 @@ func requireDockerDaemon(image string) error {
 
 func ensureImage(image string) error {
 	inspect := exec.Command("docker", "image", "inspect", image, "--format", "{{.Id}}")
-	if err := inspect.Run(); err == nil {
+	inspectOutput, inspectErr := inspect.CombinedOutput()
+	if inspectErr == nil {
 		return nil
+	}
+	if image == DefaultWebSocketJMeterImage {
+		return &RuntimeError{
+			Kind:     ErrorImagePull,
+			Image:    image,
+			Cause:    inspectErr,
+			Output:   string(inspectOutput),
+			Recovery: "Run `loadwright setup websocket`, verify with `loadwright doctor --deep --websocket`, then retry. You can also pass a custom plugin-enabled image with `loadwright run ... --image <image:tag>`.",
+		}
 	}
 	pull := exec.Command("docker", "pull", image)
 	output, err := pull.CombinedOutput()
@@ -289,7 +371,7 @@ func runJMeterVersion(image string) (string, error) {
 func testExecutionRecovery(output string) string {
 	message := "Docker and JMeter started, but the test plan failed during execution. Check the generated jmeter.log in the results directory when available."
 	if looksLikeMissingWebSocketPlugin(output) {
-		message += " WebSocket specs require an image with the WebSocket Samplers plugin, for example the image built from docker/jmeter/Dockerfile."
+		message += " WebSocket specs require an image with the WebSocket Samplers plugin. Run `loadwright setup websocket`, verify with `loadwright doctor --deep --websocket`, then retry. For custom images, pass `--image <image:tag>`."
 	}
 	return message
 }
@@ -339,4 +421,11 @@ func stringTrim(value []byte) string {
 		result = result[:len(result)-1]
 	}
 	return result
+}
+
+func shellQuote(value string) string {
+	if value == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
