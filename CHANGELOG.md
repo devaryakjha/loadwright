@@ -5,6 +5,7 @@
 - Polish the first-run documentation journey for the `v0.2.0` release.
 - Add next-step guidance after `loadwright init` creates a starter spec.
 - Add anonymous GHCR pull verification for release container images.
+- Add `loadwright setup websocket`, `doctor --deep --websocket`, and automatic WebSocket YAML runtime image selection.
 
 ## 0.2.0 - 2026-05-24
 

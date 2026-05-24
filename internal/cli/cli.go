@@ -35,6 +35,8 @@ func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 0
 	case "doctor":
 		return doctor(args[1:], stdout, stderr)
+	case "setup":
+		return setup(args[1:], stdout, stderr)
 	case "init":
 		return initSpec(args[1:], stdout, stderr)
 	case "validate":
@@ -60,7 +62,8 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, `Loadwright: Docker-first, spec-driven JMeter automation
 
 Usage:
-  loadwright doctor [--deep] [--image IMAGE]
+  loadwright doctor [--deep] [--websocket] [--image IMAGE]
+  loadwright setup websocket [--image IMAGE] [--dockerfile docker/jmeter/Dockerfile]
   loadwright version
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
@@ -74,6 +77,7 @@ Usage:
 
 Commands:
   doctor    Check local Docker/JMeter prerequisites
+  setup     Prepare local runtime dependencies
   version   Print version information
   init      Write a starter YAML spec
   import    Convert supported source formats to Loadwright specs
@@ -85,13 +89,17 @@ Commands:
 }
 
 func doctor(args []string, stdout io.Writer, stderr io.Writer) int {
-	deep, image, err := parseDoctorArgs(args)
+	options, err := parseDoctorArgs(args)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 2
 	}
 	failed := false
-	for _, check := range runtime.Doctor(runtime.DoctorOptions{Deep: deep, Image: image}) {
+	for _, check := range runtime.Doctor(runtime.DoctorOptions{
+		Deep:      options.deep,
+		Image:     options.image,
+		WebSocket: options.webSocket,
+	}) {
 		status := "PASS"
 		if !check.Passed {
 			status = "FAIL"
@@ -105,26 +113,111 @@ func doctor(args []string, stdout io.Writer, stderr io.Writer) int {
 	return 0
 }
 
-func parseDoctorArgs(args []string) (deep bool, image string, err error) {
-	image = runtime.DefaultJMeterImage
+type doctorOptions struct {
+	deep      bool
+	image     string
+	webSocket bool
+}
+
+func parseDoctorArgs(args []string) (doctorOptions, error) {
+	var options doctorOptions
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		switch {
 		case arg == "--deep":
-			deep = true
+			options.deep = true
+		case arg == "--websocket":
+			options.webSocket = true
 		case arg == "--image":
 			i++
 			if i >= len(args) {
-				return false, "", fmt.Errorf("%s requires a value", arg)
+				return doctorOptions{}, fmt.Errorf("%s requires a value", arg)
 			}
-			image = args[i]
+			options.image = args[i]
 		case strings.HasPrefix(arg, "--image="):
-			image = strings.TrimPrefix(arg, "--image=")
+			options.image = strings.TrimPrefix(arg, "--image=")
 		default:
-			return false, "", fmt.Errorf("unknown doctor option: %s", arg)
+			return doctorOptions{}, fmt.Errorf("unknown doctor option: %s", arg)
 		}
 	}
-	return deep, image, nil
+	return options, nil
+}
+
+func setup(args []string, stdout io.Writer, stderr io.Writer) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "setup requires a target: websocket")
+		return 2
+	}
+	switch args[0] {
+	case "websocket":
+		return setupWebSocket(args[1:], stdout, stderr)
+	default:
+		fmt.Fprintf(stderr, "unknown setup target: %s\n", args[0])
+		return 2
+	}
+}
+
+func setupWebSocket(args []string, stdout io.Writer, stderr io.Writer) int {
+	options, err := parseSetupWebSocketArgs(args)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	fmt.Fprintf(stdout, "building WebSocket runtime image %s\n", options.image)
+	if err := runtime.SetupWebSocketRuntime(runtime.WebSocketSetupOptions{
+		Image:      options.image,
+		Dockerfile: options.dockerfile,
+		ContextDir: ".",
+		Stdout:     stdout,
+		Stderr:     stderr,
+	}); err != nil {
+		var runtimeErr *runtime.RuntimeError
+		if errors.As(err, &runtimeErr) {
+			writeRuntimeError(stderr, err)
+		} else {
+			fmt.Fprintf(stderr, "websocket setup failed: %v\n", err)
+		}
+		return 1
+	}
+	fmt.Fprintf(stdout, "built WebSocket runtime image %s\n", options.image)
+	fmt.Fprintln(stdout, "verify with: loadwright doctor --deep --websocket")
+	return 0
+}
+
+type setupWebSocketOptions struct {
+	image      string
+	dockerfile string
+}
+
+func parseSetupWebSocketArgs(args []string) (setupWebSocketOptions, error) {
+	options := setupWebSocketOptions{
+		image:      runtime.DefaultWebSocketJMeterImage,
+		dockerfile: runtime.WebSocketDockerfile,
+	}
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--image":
+			i++
+			if i >= len(args) {
+				return setupWebSocketOptions{}, fmt.Errorf("%s requires a value", arg)
+			}
+			options.image = args[i]
+		case strings.HasPrefix(arg, "--image="):
+			options.image = strings.TrimPrefix(arg, "--image=")
+		case arg == "--dockerfile":
+			i++
+			if i >= len(args) {
+				return setupWebSocketOptions{}, fmt.Errorf("%s requires a value", arg)
+			}
+			options.dockerfile = args[i]
+		case strings.HasPrefix(arg, "--dockerfile="):
+			options.dockerfile = strings.TrimPrefix(arg, "--dockerfile=")
+		default:
+			return setupWebSocketOptions{}, fmt.Errorf("unknown setup websocket option: %s", arg)
+		}
+	}
+	return options, nil
 }
 
 func initSpec(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -221,6 +314,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 	var thresholds spec.Thresholds
 	jmxPath := input
 	generatedJMX := false
+	usesWebSocket := false
 	workDir := "."
 	if isYAML(input) {
 		loaded, err := loadResolvedSpec(input, envFile)
@@ -229,6 +323,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 			return 1
 		}
 		thresholds = loaded.Thresholds
+		usesWebSocket = specUsesWebSocket(loaded)
 		if err := stageMultipartFiles(loaded, filepath.Dir(input), outputDir); err != nil {
 			fmt.Fprintf(stderr, "stage multipart files failed: %v\n", err)
 			return 1
@@ -243,7 +338,11 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "compiled %s\n", jmxPath)
 	}
 	if image == "" {
-		image = runtime.DefaultJMeterImage
+		if usesWebSocket {
+			image = runtime.DefaultWebSocketJMeterImage
+		} else {
+			image = runtime.DefaultJMeterImage
+		}
 	}
 
 	jtlName := "results.jtl"
@@ -356,6 +455,18 @@ func runInputType(path string) string {
 		return "yaml"
 	}
 	return "jmx"
+}
+
+func specUsesWebSocket(loaded *spec.Spec) bool {
+	if loaded == nil {
+		return false
+	}
+	for _, request := range loaded.Requests {
+		if request.Protocol == "websocket" {
+			return true
+		}
+	}
+	return false
 }
 
 type latestRun struct {
@@ -707,7 +818,6 @@ func parseValidateArgs(args []string) (specPath string, envFile string, err erro
 }
 
 func parseRunArgs(args []string) (input string, outputDir string, envFile string, ci bool, image string, err error) {
-	image = runtime.DefaultJMeterImage
 	var positional []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]

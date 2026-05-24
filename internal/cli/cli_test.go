@@ -3,11 +3,14 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
+	goruntime "runtime"
 	"strings"
 	"testing"
+
+	loadwrightruntime "github.com/devaryakjha/loadwright/internal/runtime"
 )
 
 func TestParseCompileArgsAcceptsFlagsAfterSpec(t *testing.T) {
@@ -139,18 +142,28 @@ func TestParseCompareArgsErrors(t *testing.T) {
 }
 
 func TestParseDoctorArgs(t *testing.T) {
-	deep, image, err := parseDoctorArgs([]string{"--deep", "--image=custom:jmeter"})
+	options, err := parseDoctorArgs([]string{"--deep", "--websocket", "--image=custom:jmeter"})
 	if err != nil {
 		t.Fatalf("parseDoctorArgs() error = %v", err)
 	}
-	if !deep || image != "custom:jmeter" {
-		t.Fatalf("unexpected args: deep=%v image=%q", deep, image)
+	if !options.deep || !options.webSocket || options.image != "custom:jmeter" {
+		t.Fatalf("unexpected args: %+v", options)
 	}
 }
 
 func TestParseDoctorArgsRejectsUnknown(t *testing.T) {
-	if _, _, err := parseDoctorArgs([]string{"--unknown"}); err == nil {
+	if _, err := parseDoctorArgs([]string{"--unknown"}); err == nil {
 		t.Fatalf("expected unknown doctor option error")
+	}
+}
+
+func TestParseSetupWebSocketArgs(t *testing.T) {
+	options, err := parseSetupWebSocketArgs([]string{"--image=custom:ws", "--dockerfile", "Dockerfile.ws"})
+	if err != nil {
+		t.Fatalf("parseSetupWebSocketArgs() error = %v", err)
+	}
+	if options.image != "custom:ws" || options.dockerfile != "Dockerfile.ws" {
+		t.Fatalf("unexpected args: %+v", options)
 	}
 }
 
@@ -637,7 +650,7 @@ func TestRunCompileRejectsInvalidSpec(t *testing.T) {
 }
 
 func TestRunSpecCreatesReportsWithDockerShim(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -699,7 +712,7 @@ thresholds:
 }
 
 func TestRunSpecStagesMultipartFiles(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -746,7 +759,7 @@ requests:
 }
 
 func TestRunSpecDefaultOutputCreatesLatestPointer(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -786,7 +799,7 @@ requests:
 }
 
 func TestRunSpecExplicitOutputDoesNotCreateLatestPointer(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -811,7 +824,7 @@ requests:
 }
 
 func TestRunSpecThresholdFailureStillCreatesLatestPointer(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -843,7 +856,7 @@ thresholds:
 }
 
 func TestRunExistingJMXCreatesRunManifest(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -866,8 +879,71 @@ func TestRunExistingJMXCreatesRunManifest(t *testing.T) {
 	}
 }
 
+func TestRunWebSocketSpecUsesDefaultWebSocketImage(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: websocket-run
+target: wss://example.com
+load:
+  users: 1
+  ramp_up: 1s
+  loops: 1
+requests:
+  - name: ping
+    protocol: websocket
+    path: /
+    websocket:
+      message: hello
+`
+	if err := os.WriteFile("websocket.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "websocket.yaml", "--out-dir", "results/ws"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run websocket) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	manifest := readRunManifest(t, filepath.Join("results", "ws", "run.json"))
+	if manifest.Image != loadwrightruntime.DefaultWebSocketJMeterImage {
+		t.Fatalf("expected websocket image, got %+v", manifest)
+	}
+}
+
+func TestRunWebSocketSpecHonorsExplicitImage(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	specYAML := `name: websocket-run
+target: wss://example.com
+requests:
+  - protocol: websocket
+    path: /
+    websocket:
+      message: hello
+`
+	if err := os.WriteFile("websocket.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "websocket.yaml", "--out-dir", "results/ws", "--image", "custom:ws"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(run websocket) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	manifest := readRunManifest(t, filepath.Join("results", "ws", "run.json"))
+	if manifest.Image != "custom:ws" {
+		t.Fatalf("expected explicit image, got %+v", manifest)
+	}
+}
+
 func TestRunManifestDoesNotIncludeEnvValues(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -904,7 +980,7 @@ requests:
 }
 
 func TestRunReportsDockerDaemonFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -931,7 +1007,7 @@ exit 0
 }
 
 func TestDoctorReportsStoppedDockerDaemon(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -962,8 +1038,61 @@ exit 0
 	}
 }
 
+func TestDoctorDeepWebSocketChecksPluginImage(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installDockerShim(t, dir)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"doctor", "--deep", "--websocket"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(doctor websocket) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "JMeter image") ||
+		!strings.Contains(stdout.String(), loadwrightruntime.DefaultWebSocketJMeterImage) ||
+		!strings.Contains(stdout.String(), "WebSocket plugin") {
+		t.Fatalf("expected websocket doctor output, got stdout=%s", stdout.String())
+	}
+}
+
+func TestSetupWebSocketBuildsDefaultImage(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	argsFile := filepath.Join(dir, "docker-args.txt")
+	installFailingDockerShim(t, dir, fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "24.0.0"
+  exit 0
+fi
+if [ "$1" = "build" ]; then
+  printf '%%s\n' "$*" > %s
+  exit 0
+fi
+exit 1
+`, shellArg(argsFile)))
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"setup", "websocket"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("Run(setup websocket) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := string(data)
+	if !strings.Contains(args, "build -t "+loadwrightruntime.DefaultWebSocketJMeterImage) ||
+		!strings.Contains(args, "-f "+loadwrightruntime.WebSocketDockerfile) {
+		t.Fatalf("unexpected docker build args: %s", args)
+	}
+}
+
 func TestRunReportsImagePullFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -996,8 +1125,50 @@ exit 0
 	}
 }
 
+func TestRunWebSocketSpecReportsSetupRecoveryWhenImageMissing(t *testing.T) {
+	if goruntime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installFailingDockerShim(t, dir, `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "24.0.0"
+  exit 0
+fi
+if [ "$1" = "image" ]; then
+  exit 1
+fi
+if [ "$1" = "pull" ]; then
+  echo "repository does not exist" >&2
+  exit 1
+fi
+exit 0
+`)
+	specYAML := `name: websocket-run
+target: wss://example.com
+requests:
+  - protocol: websocket
+    path: /
+    websocket:
+      message: hello
+`
+	if err := os.WriteFile("websocket.yaml", []byte(specYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "websocket.yaml", "--out-dir", "results/ws"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("Run(run websocket) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "image pull failed: "+loadwrightruntime.DefaultWebSocketJMeterImage) ||
+		!strings.Contains(stderr.String(), "loadwright setup websocket") {
+		t.Fatalf("expected websocket setup recovery, got stderr=%s", stderr.String())
+	}
+}
+
 func TestRunReportsJMeterStartupFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -1031,7 +1202,7 @@ exit 0
 }
 
 func TestRunReportsTestExecutionFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if goruntime.GOOS == "windows" {
 		t.Skip("fake docker shim uses POSIX shell")
 	}
 	dir := t.TempDir()
@@ -1137,6 +1308,9 @@ for arg in "$@"; do
 done
 if [ "$1" = "run" ] && [ "$last" = "--version" ]; then
   echo "Apache JMeter 5.6.3"
+  exit 0
+fi
+if [ "$1" = "run" ] && printf '%s\n' "$*" | grep -q "test -f"; then
   exit 0
 fi
 workdir=""
