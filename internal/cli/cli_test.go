@@ -686,7 +686,7 @@ thresholds:
 	if manifest.JMX != filepath.ToSlash(filepath.Join("results", "smoke", "shim-run.jmx")) {
 		t.Fatalf("unexpected JMX path: %+v", manifest)
 	}
-	if manifest.Image != "justb4/jmeter:latest" || !manifest.CI {
+	if manifest.Image != "justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7" || !manifest.CI {
 		t.Fatalf("unexpected run flags: %+v", manifest)
 	}
 	if manifest.Artifacts.ReportHTML != filepath.ToSlash(filepath.Join("results", "smoke", "index.html")) ||
@@ -903,6 +903,173 @@ requests:
 	}
 }
 
+func TestRunReportsDockerDaemonFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installFailingDockerShim(t, dir, `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+exit 0
+`)
+	if err := os.WriteFile("existing.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "existing.jmx", "--out-dir", "results/docker-down"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "docker unavailable: justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7") ||
+		!strings.Contains(stderr.String(), "Start Docker Desktop") {
+		t.Fatalf("expected actionable docker failure, got stderr=%s", stderr.String())
+	}
+}
+
+func TestDoctorReportsStoppedDockerDaemon(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installFailingDockerShim(t, dir, `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+if [ "$1" = "image" ]; then
+  exit 1
+fi
+if [ "$1" = "pull" ]; then
+  echo "Cannot connect to the Docker daemon" >&2
+  exit 1
+fi
+exit 0
+`)
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"doctor"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("Run(doctor) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Docker daemon") ||
+		!strings.Contains(stdout.String(), "Start Docker Desktop") ||
+		!strings.Contains(stdout.String(), "docker version") {
+		t.Fatalf("expected actionable doctor output, got stdout=%s", stdout.String())
+	}
+}
+
+func TestRunReportsImagePullFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installFailingDockerShim(t, dir, `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "24.0.0"
+  exit 0
+fi
+if [ "$1" = "image" ]; then
+  exit 1
+fi
+if [ "$1" = "pull" ]; then
+  echo "manifest unknown" >&2
+  exit 1
+fi
+exit 0
+`)
+	if err := os.WriteFile("existing.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "existing.jmx", "--out-dir", "results/pull-fail", "--image", "missing:jmeter"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "image pull failed: missing:jmeter") ||
+		!strings.Contains(stderr.String(), "manifest unknown") {
+		t.Fatalf("expected image pull failure, got stderr=%s", stderr.String())
+	}
+}
+
+func TestRunReportsJMeterStartupFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installFailingDockerShim(t, dir, `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "24.0.0"
+  exit 0
+fi
+if [ "$1" = "image" ]; then
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  echo "java: command not found" >&2
+  exit 1
+fi
+exit 0
+`)
+	if err := os.WriteFile("existing.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "existing.jmx", "--out-dir", "results/startup-fail"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "jmeter startup failed: justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7") ||
+		!strings.Contains(stderr.String(), "loadwright doctor --deep") {
+		t.Fatalf("expected startup failure, got stderr=%s", stderr.String())
+	}
+}
+
+func TestRunReportsTestExecutionFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake docker shim uses POSIX shell")
+	}
+	dir := t.TempDir()
+	chdir(t, dir)
+	installFailingDockerShim(t, dir, `#!/bin/sh
+if [ "$1" = "version" ]; then
+  echo "24.0.0"
+  exit 0
+fi
+if [ "$1" = "image" ]; then
+  exit 0
+fi
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+if [ "$1" = "run" ] && [ "$last" = "--version" ]; then
+  echo "Apache JMeter 5.6.3"
+  exit 0
+fi
+echo "CannotResolveClassException: eu.luminis.jmeter.wssampler.OpenWebSocketSampler" >&2
+exit 1
+`)
+	if err := os.WriteFile("checkout-flow.jmx", []byte("<jmeterTestPlan/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"run", "checkout-flow.jmx", "--out-dir", "results/test-fail"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("Run(run) code=%d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "test execution failed: justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7") ||
+		!strings.Contains(stderr.String(), "CannotResolveClassException") ||
+		!strings.Contains(stderr.String(), "WebSocket specs require an image") {
+		t.Fatalf("expected test execution failure, got stderr=%s", stderr.String())
+	}
+}
+
 func chdir(t *testing.T, dir string) {
 	t.Helper()
 	previous, err := os.Getwd()
@@ -953,6 +1120,25 @@ func installDockerShim(t *testing.T, dir string) {
 	}
 	script := `#!/bin/sh
 set -eu
+if [ "$1" = "version" ]; then
+  echo "24.0.0"
+  exit 0
+fi
+if [ "$1" = "image" ]; then
+  echo "sha256:fake"
+  exit 0
+fi
+if [ "$1" = "pull" ]; then
+  exit 0
+fi
+last=""
+for arg in "$@"; do
+  last="$arg"
+done
+if [ "$1" = "run" ] && [ "$last" = "--version" ]; then
+  echo "Apache JMeter 5.6.3"
+  exit 0
+fi
 workdir=""
 jtl=""
 while [ "$#" -gt 0 ]; do
@@ -984,6 +1170,27 @@ timeStamp,elapsed,label,responseCode,responseMessage,threadName,dataType,success
 1,120,health,200,OK,thread-1,text,true,64,64,1,1,https://example.com/health,100,0,20
 JTL
 `
+	dockerPath := filepath.Join(binDir, "docker")
+	if err := os.WriteFile(dockerPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	previousPath := os.Getenv("PATH")
+	if err := os.Setenv("PATH", binDir+string(os.PathListSeparator)+previousPath); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Setenv("PATH", previousPath); err != nil {
+			t.Fatalf("restore PATH: %v", err)
+		}
+	})
+}
+
+func installFailingDockerShim(t *testing.T, dir string, script string) {
+	t.Helper()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	dockerPath := filepath.Join(binDir, "docker")
 	if err := os.WriteFile(dockerPath, []byte(script), 0o755); err != nil {
 		t.Fatal(err)

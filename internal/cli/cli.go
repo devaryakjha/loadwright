@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, `Loadwright: Docker-first, spec-driven JMeter automation
 
 Usage:
-  loadwright doctor [--deep] [--image justb4/jmeter:latest]
+  loadwright doctor [--deep] [--image IMAGE]
   loadwright version
   loadwright init [path]
   loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
@@ -254,7 +255,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		JTLName:    jtlName,
 	})
 	if err != nil {
-		fmt.Fprintf(stderr, "jmeter run failed: %v\n", err)
+		writeRuntimeError(stderr, err)
 		return 1
 	}
 
@@ -300,6 +301,24 @@ func run(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func writeRuntimeError(stderr io.Writer, err error) {
+	var runtimeErr *runtime.RuntimeError
+	if !errors.As(err, &runtimeErr) {
+		fmt.Fprintf(stderr, "jmeter run failed: %v\n", err)
+		return
+	}
+	fmt.Fprintf(stderr, "%s: %s\n", runtimeErr.Kind, runtimeErr.Image)
+	if runtimeErr.Cause != nil {
+		fmt.Fprintf(stderr, "cause: %v\n", runtimeErr.Cause)
+	}
+	if detail := strings.TrimSpace(runtimeErr.Output); detail != "" {
+		fmt.Fprintf(stderr, "docker output: %s\n", strings.Join(strings.Fields(detail), " "))
+	}
+	if runtimeErr.Recovery != "" {
+		fmt.Fprintf(stderr, "recovery: %s\n", runtimeErr.Recovery)
+	}
 }
 
 type runManifest struct {

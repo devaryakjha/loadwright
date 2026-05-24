@@ -134,7 +134,7 @@ More docs:
 ## Commands
 
 ```bash
-loadwright doctor [--deep] [--image justb4/jmeter:latest]
+loadwright doctor [--deep] [--image IMAGE]
 loadwright version
 loadwright init [path]
 loadwright import openapi <openapi.yaml|openapi.json> [-o loadwright.yaml] [--base-url https://api.example.com]
@@ -152,11 +152,11 @@ loadwright compare <baseline-summary.json> <candidate-summary.json> [-o comparis
 For WebSocket specs, build the bundled plugin image first, then pass it with `--image`:
 
 ```bash
-docker build -t loadwright/jmeter-websocket:latest -f docker/jmeter/Dockerfile .
-bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:latest
+docker build -t loadwright/jmeter-websocket:5.5 -f docker/jmeter/Dockerfile .
+bin/loadwright run examples/api/websocket-multi.yaml --ci --image loadwright/jmeter-websocket:5.5
 ```
 
-The `docker/jmeter/Dockerfile` extends `justb4/jmeter:latest` (the same base used for all HTTP runs) and adds the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin.
+The `docker/jmeter/Dockerfile` extends the pinned HTTP runtime image, `justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7`, and adds the [WebSocket Samplers](https://github.com/ptrd/jmeter-websocket-samplers) plugin.
 
 ## Roadmap
 

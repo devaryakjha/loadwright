@@ -26,7 +26,7 @@ bin/loadwright report results/manual-smoke/results.jtl --out-dir results/manual-
   "input_type": "yaml",
   "jmx": "results/20260425-120000/example-api.jmx",
   "generated_jmx": true,
-  "image": "justb4/jmeter:latest",
+  "image": "justb4/jmeter@sha256:088ac52b759a198a5afa5ae13d0a6306e9f2017d71ad140ff57427f6930406f7",
   "ci": true,
   "started_at": "2026-04-25T12:00:00Z",
   "finished_at": "2026-04-25T12:00:10Z",
